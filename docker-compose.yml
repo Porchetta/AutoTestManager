@@ -1,0 +1,53 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: mss_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mss_test_manager
+      MYSQL_USER: mss_user
+      MYSQL_PASSWORD: mss_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mss_network
+
+  backend:
+    build: ./backend
+    container_name: mss_backend
+    restart: always
+    ports:
+      - "40223:40223"
+    environment:
+      DATABASE_URL: mysql+pymysql://mss_user:mss_password@db/mss_test_manager
+      SECRET_KEY: supersecretkey_change_this_in_production
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+    depends_on:
+      - db
+    networks:
+      - mss_network
+    volumes:
+      - ./backend/app:/app/app
+
+  frontend:
+    build: ./frontend
+    container_name: mss_frontend
+    restart: always
+    ports:
+      - "40203:80"
+    depends_on:
+      - backend
+    networks:
+      - mss_network
+
+networks:
+  mss_network:
+    driver: bridge
+
+volumes:
+  db_data:
