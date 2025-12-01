@@ -1,0 +1,9 @@
+services:
+  db:
+    image: ${DB_IMAGE:-mysql:8.0}
+  backend:
+    image: ${BACKEND_IMAGE:-mss-backend:offline}
+    build: null
+  frontend:
+    image: ${FRONTEND_IMAGE:-mss-frontend:offline}
+    build: null
