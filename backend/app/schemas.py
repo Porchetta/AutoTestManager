@@ -13,19 +13,21 @@ class TokenData(BaseModel):
 # --- User Schemas ---
 class UserBase(BaseModel):
     user_id: str
+    module_name: str
 
 class UserCreate(UserBase):
     password: str
 
 class UserUpdate(BaseModel):
     password: Optional[str] = None
+    module_name: Optional[str] = None
     is_admin: Optional[bool] = None
     is_approved: Optional[bool] = None
 
 class UserResponse(UserBase):
     is_admin: bool
     is_approved: bool
-    created_at: datetime
+    created: datetime
 
     class Config:
         from_attributes = True
@@ -36,27 +38,30 @@ class PasswordChange(BaseModel):
 
 # --- Config Schemas ---
 class RTDConfigBase(BaseModel):
+    line_name: str
+    line_id: str
     business_unit: str
-    development_line: str
     home_dir_path: str
-    is_target_line: bool
+    modifier: Optional[str] = None
 
 class RTDConfigCreate(RTDConfigBase):
     pass
 
 class RTDConfigResponse(RTDConfigBase):
-    id: int
+    created: datetime
     class Config:
         from_attributes = True
 
 class EzDFSConfigBase(BaseModel):
-    target_server_name: str
-    dir_path: str
+    module_name: str
+    port_num: str
+    home_dir_path: str
+    modifier: Optional[str] = None
 
 class EzDFSConfigCreate(EzDFSConfigBase):
     pass
 
 class EzDFSConfigResponse(EzDFSConfigBase):
-    id: int
+    created: datetime
     class Config:
         from_attributes = True

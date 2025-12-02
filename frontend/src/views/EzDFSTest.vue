@@ -7,7 +7,7 @@
         <label>Target Server</label>
         <select v-model="selectedServer" @change="fetchRules">
           <option disabled value="">Select Server</option>
-          <option v-for="s in servers" :key="s.id" :value="s.id">{{ s.target_server_name }}</option>
+          <option v-for="s in servers" :key="s.module_name" :value="s.module_name">{{ s.module_name }}:{{ s.port_num }}</option>
         </select>
       </div>
 
@@ -65,14 +65,14 @@ onMounted(async () => {
 });
 
 const fetchRules = async () => {
-  const res = await api.get('/ezdfs/rules', { params: { server_id: selectedServer.value } });
+  const res = await api.get('/ezdfs/rules', { params: { module_name: selectedServer.value } });
   rules.value = res.data;
 };
 
 const addToFavorites = async () => {
   if (!selectedRule.value) return;
   await api.put('/ezdfs/favorites', null, {
-    params: { rule_name: selectedRule.value, target_server_id: selectedServer.value }
+    params: { rule_name: selectedRule.value, module_name: selectedServer.value }
   });
   favorites.value.push(selectedRule.value);
 };
@@ -86,7 +86,7 @@ const runTest = async () => {
   resultReady.value = false;
   try {
     const res = await api.post('/ezdfs/test/start', null, {
-      params: { server_id: selectedServer.value, rule_name: selectedRule.value }
+      params: { module_name: selectedServer.value, rule_name: selectedRule.value }
     });
     taskId.value = res.data.task_id;
     pollStatus();
