@@ -50,13 +50,14 @@ async def register_user(user: schemas.UserCreate, db: Session = Depends(database
     db_user = db.query(models.User).filter(models.User.user_id == user.user_id).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
-    
+
     hashed_password = auth.get_password_hash(user.password)
     # Default: not admin, not approved (unless it's the very first user? No, let's stick to spec: admin approves)
     # For testing convenience, if user_id is 'admin', make it admin/approved? No, init.sql handles that.
     new_user = models.User(
         user_id=user.user_id,
         password_hash=hashed_password,
+        module_name=user.module_name,
         is_admin=False,
         is_approved=False
     )

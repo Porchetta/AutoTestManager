@@ -21,13 +21,13 @@ async def get_businesses(db: Session = Depends(database.get_db)):
 # --- Step 2: Development Lines ---
 @router.get("/lines", response_model=List[str])
 async def get_lines(business_unit: str, db: Session = Depends(database.get_db)):
-    results = db.query(models.RTDConfig.development_line).filter(models.RTDConfig.business_unit == business_unit).distinct().all()
+    results = db.query(models.RTDConfig.line_name).filter(models.RTDConfig.business_unit == business_unit).distinct().all()
     return [r[0] for r in results]
 
 # --- Step 3: Rules ---
 @router.get("/rules", response_model=List[str])
-async def get_rules(development_line: str):
-    return [f"Rule_A_{development_line}", f"Rule_B_{development_line}", "Common_Rule_X"]
+async def get_rules(line_name: str):
+    return [f"Rule_A_{line_name}", f"Rule_B_{line_name}", "Common_Rule_X"]
 
 # --- Step 4: Versions ---
 @router.get("/rules/{rule_id}/versions")
@@ -40,9 +40,8 @@ async def get_rule_versions(rule_id: str):
 # --- Step 5: Target Lines ---
 @router.get("/target-lines", response_model=List[str])
 async def get_target_lines(business_unit: str, db: Session = Depends(database.get_db)):
-    results = db.query(models.RTDConfig.development_line).filter(
-        models.RTDConfig.business_unit == business_unit,
-        models.RTDConfig.is_target_line == True
+    results = db.query(models.RTDConfig.line_name).filter(
+        models.RTDConfig.business_unit == business_unit
     ).all()
     return [r[0] for r in results]
 

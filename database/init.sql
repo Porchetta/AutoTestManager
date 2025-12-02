@@ -2,35 +2,51 @@
 CREATE TABLE IF NOT EXISTS users (
     user_id VARCHAR(50) PRIMARY KEY,
     password_hash VARCHAR(255) NOT NULL,
+    module_name VARCHAR(50) NOT NULL,
     is_admin BOOLEAN NOT NULL DEFAULT FALSE,
     is_approved BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create RTD Config Table
 CREATE TABLE IF NOT EXISTS rtd_config (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    business_unit VARCHAR(100) NOT NULL,
-    development_line VARCHAR(100) NOT NULL,
+    line_name VARCHAR(50) PRIMARY KEY,
+    line_id VARCHAR(50) NOT NULL,
+    business_unit VARCHAR(50) NOT NULL,
     home_dir_path VARCHAR(255) NOT NULL,
-    is_target_line BOOLEAN NOT NULL DEFAULT FALSE
+    created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    modifier VARCHAR(50)
 );
 
 -- Create ezDFS Config Table
 CREATE TABLE IF NOT EXISTS ezdfs_config (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    target_server_name VARCHAR(100) NOT NULL,
-    dir_path VARCHAR(255) NOT NULL
+    module_name VARCHAR(50) PRIMARY KEY,
+    port_num VARCHAR(50) NOT NULL,
+    home_dir_path VARCHAR(255) NOT NULL,
+    created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    modifier VARCHAR(50)
 );
 
--- Create User Favorites Table
-CREATE TABLE IF NOT EXISTS user_favorites (
+-- Create User RTD Favorites Table
+CREATE TABLE IF NOT EXISTS user_rtd_favorites (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL,
-    rule_name VARCHAR(100) NOT NULL,
-    target_server_id INT,
+    line_name VARCHAR(50),
+    rule_name VARCHAR(50) NOT NULL,
+    created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (target_server_id) REFERENCES ezdfs_config(id) ON DELETE SET NULL
+    FOREIGN KEY (line_name) REFERENCES rtd_config(line_name) ON DELETE SET NULL
+);
+
+-- Create User ezDFS Favorites Table
+CREATE TABLE IF NOT EXISTS user_ezfds_favorites (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL,
+    module_name VARCHAR(50),
+    rule_name VARCHAR(50) NOT NULL,
+    created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (module_name) REFERENCES ezdfs_config(module_name) ON DELETE SET NULL
 );
 
 -- Create Test Results Table
@@ -53,4 +69,4 @@ CREATE TABLE IF NOT EXISTS test_results (
 -- Actually, it's safer to let the backend create the first admin or have a registration flow.
 -- But for convenience, let's assume 'admin' / 'admin' for now.
 -- Hash for 'admin': $2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxwKc.60rScphF.1k1.
-INSERT INTO users (user_id, password_hash, is_admin, is_approved) VALUES ('admin', '$2b$12$dE5w9cFApfIYR.5rE9.LiusVihkMeEToFNnlA5pZl9jn1QcBycgMC', TRUE, TRUE);
+INSERT INTO users (user_id, password_hash, module_name, is_admin, is_approved) VALUES ('admin', '$2b$12$dE5w9cFApfIYR.5rE9.LiusVihkMeEToFNnlA5pZl9jn1QcBycgMC', 'default', TRUE, TRUE);

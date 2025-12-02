@@ -57,9 +57,9 @@ async def create_rtd_config(config: schemas.RTDConfigCreate, db: Session = Depen
     db.refresh(db_config)
     return db_config
 
-@router.delete("/rtd/configs/{config_id}")
-async def delete_rtd_config(config_id: int, db: Session = Depends(database.get_db)):
-    config = db.query(models.RTDConfig).filter(models.RTDConfig.id == config_id).first()
+@router.delete("/rtd/configs/{line_name}")
+async def delete_rtd_config(line_name: str, db: Session = Depends(database.get_db)):
+    config = db.query(models.RTDConfig).filter(models.RTDConfig.line_name == line_name).first()
     if not config:
         raise HTTPException(status_code=404, detail="Config not found")
     db.delete(config)
@@ -79,9 +79,9 @@ async def create_ezdfs_config(config: schemas.EzDFSConfigCreate, db: Session = D
     db.refresh(db_config)
     return db_config
 
-@router.delete("/ezdfs/configs/{config_id}")
-async def delete_ezdfs_config(config_id: int, db: Session = Depends(database.get_db)):
-    config = db.query(models.EzDFSConfig).filter(models.EzDFSConfig.id == config_id).first()
+@router.delete("/ezdfs/configs/{module_name}")
+async def delete_ezdfs_config(module_name: str, db: Session = Depends(database.get_db)):
+    config = db.query(models.EzDFSConfig).filter(models.EzDFSConfig.module_name == module_name).first()
     if not config:
         raise HTTPException(status_code=404, detail="Config not found")
     db.delete(config)
