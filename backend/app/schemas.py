@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 
 # --- Token Schemas ---
@@ -52,6 +52,17 @@ class RTDConfigResponse(RTDConfigBase):
     class Config:
         from_attributes = True
 
+
+class RTDLineResponse(BaseModel):
+    line_name: str
+    line_id: str
+    home_dir_path: str
+
+
+class RTDRuleResponse(BaseModel):
+    home_dir_path: str
+    rules: List[str]
+
 class EzDFSConfigBase(BaseModel):
     module_name: str
     port_num: str
@@ -65,3 +76,57 @@ class EzDFSConfigResponse(EzDFSConfigBase):
     created: datetime
     class Config:
         from_attributes = True
+
+
+class RTDTestRequest(BaseModel):
+    rule_id: str
+    target_lines: List[str]
+
+
+class RTDLineStatus(BaseModel):
+    line_name: str
+    status: str
+    raw_result_path: Optional[str] = None
+    progress: int
+
+
+class RTDStatusResponse(BaseModel):
+    task_id: str
+    status: str
+    line_statuses: List[RTDLineStatus]
+
+
+class RTDSessionPayload(BaseModel):
+    step: int
+    selectedBusiness: Optional[str] = None
+    selectedLine: Optional[str] = None
+    selectedRule: Optional[str] = None
+    selectedTargets: List[str] = []
+    summaryText: Optional[str] = None
+
+
+class EzdfsTarget(BaseModel):
+    module_name: str
+    rule_name: str
+
+
+class EzdfsTestRequest(BaseModel):
+    targets: List[EzdfsTarget]
+
+
+class EzdfsTargetStatus(BaseModel):
+    module_name: str
+    status: str
+    raw_result_path: Optional[str] = None
+    progress: int
+
+
+class EzdfsStatusResponse(BaseModel):
+    task_id: str
+    status: str
+    target_statuses: List[EzdfsTargetStatus]
+
+
+class EzdfsSessionPayload(BaseModel):
+    targets: List[Dict[str, Optional[str]]]
+    summaryText: Optional[str] = None
