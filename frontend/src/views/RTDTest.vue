@@ -125,7 +125,7 @@ const fetchLines = async () => {
 };
 
 const fetchRules = async () => {
-  const res = await api.get('/rtd/rules', { params: { development_line: selectedLine.value } });
+  const res = await api.get('/rtd/rules', { params: { line_name: selectedLine.value } });
   rules.value = res.data;
 };
 
