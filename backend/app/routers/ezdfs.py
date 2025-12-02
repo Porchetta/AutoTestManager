@@ -18,17 +18,17 @@ async def get_servers(db: Session = Depends(database.get_db)):
 
 # --- Step 2: Rules ---
 @router.get("/rules", response_model=List[str])
-async def get_rules(server_id: int):
-    return [f"Rule_X_Server_{server_id}", f"Rule_Y_Server_{server_id}"]
+async def get_rules(module_name: str):
+    return [f"Rule_X_{module_name}", f"Rule_Y_{module_name}"]
 
 # --- Favorites ---
 @router.get("/favorites", response_model=List[str])
 async def get_favorites(user: models.User = Depends(auth.get_current_active_user), db: Session = Depends(database.get_db)):
-    return [f.rule_name for f in user.favorites]
+    return [f.rule_name for f in user.ezdfs_favorites]
 
 @router.put("/favorites")
-async def add_favorite(rule_name: str, target_server_id: int, user: models.User = Depends(auth.get_current_active_user), db: Session = Depends(database.get_db)):
-    fav = models.UserFavorites(user_id=user.user_id, rule_name=rule_name, target_server_id=target_server_id)
+async def add_favorite(rule_name: str, module_name: str, user: models.User = Depends(auth.get_current_active_user), db: Session = Depends(database.get_db)):
+    fav = models.UserEZFDSFavorite(user_id=user.user_id, rule_name=rule_name, module_name=module_name)
     db.add(fav)
     db.commit()
     return {"message": "Favorite added"}
@@ -57,7 +57,7 @@ async def run_ezdfs_test_task_wrapper(task_id: str):
 
 @router.post("/test/start")
 async def start_ezdfs_test(
-    server_id: int,
+    module_name: str,
     rule_name: str,
     background_tasks: BackgroundTasks,
     user: models.User = Depends(auth.get_current_active_user),
