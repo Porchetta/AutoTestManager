@@ -30,14 +30,18 @@
 | 승인/거부 | `PUT /users/{user_id}/status?is_approved=` | 사용자 승인 상태 토글. |
 | Admin 권한 | `PUT /users/{user_id}/role?is_admin=` | 관리자 권한 부여/회수. |
 | 사용자 삭제 | `DELETE /users/{user_id}` | 사용자 레코드 삭제. |
-| RTD 설정 조회/생성 | `GET /rtd/configs`, `POST /rtd/configs` | 사업부/라인 설정 CRUD(추가는 line_name/line_id/business_unit/home_dir_path/modifier). |
+| 호스트 조회/생성 | `GET /hosts`, `POST /hosts` | 테스트 대상 개발 서버 IP/user_id/password 등록. IP는 고유해야 함. |
+| 호스트 삭제 | `DELETE /hosts/{ip}` | 참조 중(`rtd_config`/`ezdfs_config`)이면 400 반환. |
+| RTD 설정 조회/생성 | `GET /rtd/configs`, `POST /rtd/configs` | 사업부/라인 설정 CRUD(추가는 line_name/line_id/business_unit/home_dir_path/host/modifier, host 존재 여부 검증). |
 | RTD 설정 삭제 | `DELETE /rtd/configs/{line_name}` | 특정 라인 설정 삭제. |
-| ezDFS 설정 조회/생성 | `GET /ezdfs/configs`, `POST /ezdfs/configs` | 타겟 서버 모듈 설정 CRUD(module_name/port_num/home_dir_path/modifier). |
+| ezDFS 설정 조회/생성 | `GET /ezdfs/configs`, `POST /ezdfs/configs` | 타겟 서버 모듈 설정 CRUD(module_name/port_num/home_dir_path/host/modifier, host 존재 여부 검증). |
 | ezDFS 설정 삭제 | `DELETE /ezdfs/configs/{module_name}` | 특정 모듈 설정 삭제. |
 
 ---
 
 ## 📝 RTD Test API (prefix: `/api/rtd`, 승인 사용자만)
+
+- 모든 RTD 테스트는 `rtd_config.host`가 가리키는 개발 서버를 대상으로 실행하도록 설계되어 있으며, 호스트 정보는 `host_config` 테이블에서 관리한다.
 
 - **사업부/라인/Rule**
   - `GET /businesses`: DB에서 사업부 목록 조회(없으면 Memory/Foundry/NRD 기본값 반환).
@@ -58,6 +62,8 @@
 ---
 
 ## 🎯 ezDFS Test API (prefix: `/api/ezdfs`, 승인 사용자만)
+
+- ezDFS 테스트 역시 `ezdfs_config.host`에 연결된 개발 서버에서 수행되며, 호스트는 Admin이 사전에 `host_config`에 등록해야 한다.
 
 - **타겟/Rule/즐겨찾기**
   - `GET /servers`: DB의 ezDFS 설정 목록 반환.
@@ -87,6 +93,6 @@
 
 ## ⚙️ 기타 구현 디테일
 
-- **모델**: `User`, `RTDConfig`, `EzDFSConfig`, `UserRTDFavorite`, `UserEZFDSFavorite`, `TestResults`를 SQLAlchemy 모델로 정의.
+- **모델**: `User`, `HostConfig`, `RTDConfig`, `EzDFSConfig`, `UserRTDFavorite`, `UserEZFDSFavorite`, `TestResults`를 SQLAlchemy 모델로 정의. `RTDConfig`/`EzDFSConfig`는 `host_config.ip`를 외래키로 가지며 호스트 삭제 시 참조가 있으면 차단된다.
 - **비즈니스 로직**: 테스트 실행/요약 생성은 실제 외부 실행 대신 `asyncio.sleep`으로 모의 진행률을 갱신하고, Raw/요약 경로를 `/tmp` 하위로 설정한다.
 - **세션/작업 상태 저장소**: 프로세스 메모리 딕셔너리(`RTD_TASK_STATE`, `EZDFS_TASK_STATE`, `RTD_SESSIONS`, `EZDFS_SESSIONS`) 사용. 재시작 시 초기화됨.
