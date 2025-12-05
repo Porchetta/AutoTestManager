@@ -37,11 +37,29 @@ class PasswordChange(BaseModel):
     new_password: str
 
 # --- Config Schemas ---
+class HostConfigBase(BaseModel):
+    ip: str
+    user_id: str
+    password: str
+
+
+class HostConfigCreate(HostConfigBase):
+    pass
+
+
+class HostConfigResponse(HostConfigBase):
+    created: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class RTDConfigBase(BaseModel):
     line_name: str
     line_id: str
     business_unit: str
     home_dir_path: str
+    host: str
     modifier: Optional[str] = None
 
 class RTDConfigCreate(RTDConfigBase):
@@ -67,6 +85,7 @@ class EzDFSConfigBase(BaseModel):
     module_name: str
     port_num: str
     home_dir_path: str
+    host: str
     modifier: Optional[str] = None
 
 class EzDFSConfigCreate(EzDFSConfigBase):

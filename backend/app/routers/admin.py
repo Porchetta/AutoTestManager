@@ -44,6 +44,37 @@ async def delete_user(user_id: str, db: Session = Depends(database.get_db)):
     db.commit()
     return {"message": "User deleted"}
 
+# --- Host Management ---
+@router.get("/hosts", response_model=List[schemas.HostConfigResponse])
+async def read_hosts(db: Session = Depends(database.get_db)):
+    return db.query(models.HostConfig).all()
+
+
+@router.post("/hosts", response_model=schemas.HostConfigResponse)
+async def create_host(host: schemas.HostConfigCreate, db: Session = Depends(database.get_db)):
+    if db.query(models.HostConfig).filter(models.HostConfig.ip == host.ip).first():
+        raise HTTPException(status_code=400, detail="Host already exists")
+    db_host = models.HostConfig(**host.model_dump())
+    db.add(db_host)
+    db.commit()
+    db.refresh(db_host)
+    return db_host
+
+
+@router.delete("/hosts/{ip}")
+async def delete_host(ip: str, db: Session = Depends(database.get_db)):
+    host = db.query(models.HostConfig).filter(models.HostConfig.ip == ip).first()
+    if not host:
+        raise HTTPException(status_code=404, detail="Host not found")
+    in_use = db.query(models.RTDConfig).filter(models.RTDConfig.host == ip).first() or \
+        db.query(models.EzDFSConfig).filter(models.EzDFSConfig.host == ip).first()
+    if in_use:
+        raise HTTPException(status_code=400, detail="Host is referenced by existing configs")
+    db.delete(host)
+    db.commit()
+    return {"message": "Host deleted"}
+
+
 # --- RTD Config Management ---
 @router.get("/rtd/configs", response_model=List[schemas.RTDConfigResponse])
 async def read_rtd_configs(db: Session = Depends(database.get_db)):
@@ -51,6 +82,8 @@ async def read_rtd_configs(db: Session = Depends(database.get_db)):
 
 @router.post("/rtd/configs", response_model=schemas.RTDConfigResponse)
 async def create_rtd_config(config: schemas.RTDConfigCreate, db: Session = Depends(database.get_db)):
+    if not db.query(models.HostConfig).filter(models.HostConfig.ip == config.host).first():
+        raise HTTPException(status_code=400, detail="Host not found")
     db_config = models.RTDConfig(**config.dict())
     db.add(db_config)
     db.commit()
@@ -73,6 +106,8 @@ async def read_ezdfs_configs(db: Session = Depends(database.get_db)):
 
 @router.post("/ezdfs/configs", response_model=schemas.EzDFSConfigResponse)
 async def create_ezdfs_config(config: schemas.EzDFSConfigCreate, db: Session = Depends(database.get_db)):
+    if not db.query(models.HostConfig).filter(models.HostConfig.ip == config.host).first():
+        raise HTTPException(status_code=400, detail="Host not found")
     db_config = models.EzDFSConfig(**config.dict())
     db.add(db_config)
     db.commit()

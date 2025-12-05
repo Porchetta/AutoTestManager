@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from .database import Base
 from datetime import datetime
 
+
 class User(Base):
     __tablename__ = "users"
 
@@ -17,6 +18,19 @@ class User(Base):
     ezdfs_favorites = relationship("UserEZFDSFavorite", back_populates="user")
     test_results = relationship("TestResults", back_populates="user")
 
+
+class HostConfig(Base):
+    __tablename__ = "host_config"
+
+    ip = Column(String(100), primary_key=True, index=True)
+    user_id = Column(String(100), nullable=False)
+    password = Column(String(255), nullable=False)
+    created = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    rtd_configs = relationship("RTDConfig", back_populates="host_config")
+    ezdfs_configs = relationship("EzDFSConfig", back_populates="host_config")
+
+
 class RTDConfig(Base):
     __tablename__ = "rtd_config"
 
@@ -24,10 +38,13 @@ class RTDConfig(Base):
     line_id = Column(String(50), nullable=False)
     business_unit = Column(String(50), nullable=False)
     home_dir_path = Column(String(255), nullable=False)
+    host = Column(String(100), ForeignKey("host_config.ip", ondelete="RESTRICT"), nullable=False)
     created = Column(DateTime, default=datetime.utcnow, nullable=False)
     modifier = Column(String(50), nullable=True)
 
+    host_config = relationship("HostConfig", back_populates="rtd_configs")
     favorites = relationship("UserRTDFavorite", back_populates="line")
+
 
 class EzDFSConfig(Base):
     __tablename__ = "ezdfs_config"
@@ -35,10 +52,13 @@ class EzDFSConfig(Base):
     module_name = Column(String(50), primary_key=True, index=True)
     port_num = Column(String(50), nullable=False)
     home_dir_path = Column(String(255), nullable=False)
+    host = Column(String(100), ForeignKey("host_config.ip", ondelete="RESTRICT"), nullable=False)
     created = Column(DateTime, default=datetime.utcnow, nullable=False)
     modifier = Column(String(50), nullable=True)
 
+    host_config = relationship("HostConfig", back_populates="ezdfs_configs")
     favorites = relationship("UserEZFDSFavorite", back_populates="module")
+
 
 class UserRTDFavorite(Base):
     __tablename__ = "user_rtd_favorites"
@@ -52,6 +72,7 @@ class UserRTDFavorite(Base):
     user = relationship("User", back_populates="rtd_favorites")
     line = relationship("RTDConfig", back_populates="favorites")
 
+
 class UserEZFDSFavorite(Base):
     __tablename__ = "user_ezfds_favorites"
 
@@ -63,6 +84,7 @@ class UserEZFDSFavorite(Base):
 
     user = relationship("User", back_populates="ezdfs_favorites")
     module = relationship("EzDFSConfig", back_populates="favorites")
+
 
 class TestResults(Base):
     __tablename__ = "test_results"

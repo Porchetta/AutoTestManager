@@ -64,8 +64,9 @@
 ## 👑 Admin 화면 (`/admin`)
 
 - **User Management**: 전체 사용자 목록 조회, 승인/회수(`PUT /users/{id}/status`), Admin 승격/강등(`PUT /users/{id}/role`) 기능 제공.
-- **RTD Config**: line_name/line_id/business_unit/home_dir_path/modifier 입력 후 추가, 항목 삭제 기능. 모든 데이터는 `/api/admin/rtd/configs` 로 CRUD.
-- **ezDFS Config**: module_name/port/home_dir_path/modifier 입력 후 추가 및 삭제. `/api/admin/ezdfs/configs` 로 CRUD.
+- **Hosts**: 개발 서버 접속 정보를 IP/user_id/password로 등록/삭제. 모든 RTD/ezDFS 테스트는 등록된 호스트를 통해 실행되므로 설정 전에 `/api/admin/hosts` 로 호스트를 준비해야 함.
+- **RTD Config**: line_name/line_id/business_unit/home_dir_path/host/modifier 입력 후 추가, 항목 삭제 기능. 모든 데이터는 `/api/admin/rtd/configs` 로 CRUD.
+- **ezDFS Config**: module_name/port/home_dir_path/host/modifier 입력 후 추가 및 삭제. `/api/admin/ezdfs/configs` 로 CRUD.
 
 ---
 

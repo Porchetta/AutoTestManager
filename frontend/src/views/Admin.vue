@@ -6,6 +6,7 @@
       <button :class="{ active: tab === 'users' }" @click="tab = 'users'">User Management</button>
       <button :class="{ active: tab === 'rtd' }" @click="tab = 'rtd'">RTD Config</button>
       <button :class="{ active: tab === 'ezdfs' }" @click="tab = 'ezdfs'">ezDFS Config</button>
+      <button :class="{ active: tab === 'hosts' }" @click="tab = 'hosts'">Hosts</button>
     </div>
 
     <div v-if="tab === 'users'" class="tab-content">
@@ -46,12 +47,16 @@
         <input v-model="newRtd.line_id" placeholder="Line ID" />
         <input v-model="newRtd.business_unit" placeholder="Business Unit" />
         <input v-model="newRtd.home_dir_path" placeholder="Home Dir" />
+        <select v-model="newRtd.host">
+          <option disabled value="">Select Host</option>
+          <option v-for="h in hostConfigs" :key="h.ip" :value="h.ip">{{ h.ip }}</option>
+        </select>
         <input v-model="newRtd.modifier" placeholder="Modifier" />
         <button @click="addRtdConfig">Add</button>
       </div>
       <ul>
         <li v-for="c in rtdConfigs" :key="c.line_name">
-          {{ c.business_unit }} - {{ c.line_name }} [{{ c.line_id }}] ({{ c.home_dir_path }})
+          {{ c.business_unit }} - {{ c.line_name }} [{{ c.line_id }}] ({{ c.home_dir_path }}) @ {{ c.host }}
           <button @click="deleteRtdConfig(c.line_name)" class="small-btn warn">Delete</button>
         </li>
       </ul>
@@ -64,13 +69,33 @@
         <input v-model="newEzdfs.module_name" placeholder="Module Name" />
         <input v-model="newEzdfs.port_num" placeholder="Port" />
         <input v-model="newEzdfs.home_dir_path" placeholder="Home Dir" />
+        <select v-model="newEzdfs.host">
+          <option disabled value="">Select Host</option>
+          <option v-for="h in hostConfigs" :key="h.ip" :value="h.ip">{{ h.ip }}</option>
+        </select>
         <input v-model="newEzdfs.modifier" placeholder="Modifier" />
         <button @click="addEzdfsConfig">Add</button>
       </div>
       <ul>
         <li v-for="c in ezdfsConfigs" :key="c.module_name">
-          {{ c.module_name }}:{{ c.port_num }} ({{ c.home_dir_path }})
+          {{ c.module_name }}:{{ c.port_num }} ({{ c.home_dir_path }}) @ {{ c.host }}
           <button @click="deleteEzdfsConfig(c.module_name)" class="small-btn warn">Delete</button>
+        </li>
+      </ul>
+    </div>
+
+    <div v-if="tab === 'hosts'" class="tab-content">
+      <h3>Test Hosts</h3>
+      <div class="add-form">
+        <input v-model="newHost.ip" placeholder="IP" />
+        <input v-model="newHost.user_id" placeholder="User ID" />
+        <input v-model="newHost.password" placeholder="Password" type="password" />
+        <button @click="addHost">Add Host</button>
+      </div>
+      <ul>
+        <li v-for="h in hostConfigs" :key="h.ip">
+          {{ h.ip }} ({{ h.user_id }})
+          <button @click="deleteHost(h.ip)" class="small-btn warn">Delete</button>
         </li>
       </ul>
     </div>
@@ -85,9 +110,11 @@ const tab = ref('users');
 const users = ref([]);
 const rtdConfigs = ref([]);
 const ezdfsConfigs = ref([]);
+const hostConfigs = ref([]);
 
-const newRtd = reactive({ line_name: '', line_id: '', business_unit: '', home_dir_path: '', modifier: '' });
-const newEzdfs = reactive({ module_name: '', port_num: '', home_dir_path: '', modifier: '' });
+const newRtd = reactive({ line_name: '', line_id: '', business_unit: '', home_dir_path: '', host: '', modifier: '' });
+const newEzdfs = reactive({ module_name: '', port_num: '', home_dir_path: '', host: '', modifier: '' });
+const newHost = reactive({ ip: '', user_id: '', password: '' });
 
 const loadData = async () => {
   const uRes = await api.get('/admin/users');
@@ -96,6 +123,8 @@ const loadData = async () => {
   rtdConfigs.value = rRes.data;
   const eRes = await api.get('/admin/ezdfs/configs');
   ezdfsConfigs.value = eRes.data;
+  const hRes = await api.get('/admin/hosts');
+  hostConfigs.value = hRes.data;
 };
 
 onMounted(loadData);
@@ -127,6 +156,19 @@ const addEzdfsConfig = async () => {
 
 const deleteEzdfsConfig = async (moduleName) => {
   await api.delete(`/admin/ezdfs/configs/${moduleName}`);
+  loadData();
+};
+
+const addHost = async () => {
+  await api.post('/admin/hosts', newHost);
+  newHost.ip = '';
+  newHost.user_id = '';
+  newHost.password = '';
+  loadData();
+};
+
+const deleteHost = async (ip) => {
+  await api.delete(`/admin/hosts/${ip}`);
   loadData();
 };
 </script>

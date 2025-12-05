@@ -1,4 +1,3 @@
--- Create Users Table
 CREATE TABLE IF NOT EXISTS users (
     user_id VARCHAR(50) PRIMARY KEY,
     password_hash VARCHAR(255) NOT NULL,
@@ -7,15 +6,24 @@ CREATE TABLE IF NOT EXISTS users (
     is_approved BOOLEAN NOT NULL DEFAULT FALSE,
     created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
--- TEST
+-- Host configuration for RTD/ezDFS targets
+CREATE TABLE IF NOT EXISTS host_config (
+    ip VARCHAR(100) PRIMARY KEY,
+    user_id VARCHAR(100) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create RTD Config Table
 CREATE TABLE IF NOT EXISTS rtd_config (
     line_name VARCHAR(50) PRIMARY KEY,
     line_id VARCHAR(50) NOT NULL,
     business_unit VARCHAR(50) NOT NULL,
     home_dir_path VARCHAR(255) NOT NULL,
+    host VARCHAR(100) NOT NULL,
     created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    modifier VARCHAR(50)
+    modifier VARCHAR(50),
+    FOREIGN KEY (host) REFERENCES host_config(ip) ON DELETE RESTRICT
 );
 
 -- Create ezDFS Config Table
@@ -23,8 +31,10 @@ CREATE TABLE IF NOT EXISTS ezdfs_config (
     module_name VARCHAR(50) PRIMARY KEY,
     port_num VARCHAR(50) NOT NULL,
     home_dir_path VARCHAR(255) NOT NULL,
+    host VARCHAR(100) NOT NULL,
     created DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    modifier VARCHAR(50)
+    modifier VARCHAR(50),
+    FOREIGN KEY (host) REFERENCES host_config(ip) ON DELETE RESTRICT
 );
 
 -- Create User RTD Favorites Table
