@@ -1,64 +1,94 @@
-# MSS Test Manager DB 서버 명세서 (MySQL 기준)
+# MSS Test Manager DB 명세서 (MySQL)
 
-## 💻 DB 환경 및 기술 스택
+## 💻 환경 및 구성
 
-| 구분 | 내용 | 비고 |
-| :--- | :--- | :--- |
-| **DB 시스템** | Oracle XE 또는 **MySQL** | 초기화(Init) 스크립트 작성 필요 |
-| **운영 환경** | Linux Docker 컨테이너 | 데이터 영속성을 위해 **Volume Mount** 필수 |
-| **네트워크** | 외부 인터넷 연결이 되지 않는 사내망 사용 | Back End 컨테이너와 내부 네트워크 연결 필요 |
+| 구분 | 내용 |
+| :--- | :--- |
+| **DB 엔진** | MySQL 8 (Docker Compose에서 `mysql:8.0` 사용) |
+| **초기화 스크립트** | `database/init.sql`을 `/docker-entrypoint-initdb.d/`로 마운트하여 테이블 및 기본 Admin 계정 생성 + 테스트 호스트 설정 |
+| **기본 접속 정보** | DB: `mss_test_manager`, User: `mss_user` / `mss_password` (루트 비밀번호 `rootpassword`) |
+| **포트/볼륨** | 3306 노출, `db_data` 볼륨으로 데이터 영속화 |
+| **네트워크** | `mss_network` 브리지 네트워크를 통해 백엔드 컨테이너와 통신 |
 
 ---
 
-## 🏛️ 주요 테이블 스키마 명세
+## 🏛️ 테이블 스키마
 
-### 1. 🧑‍💻 사용자 및 권한 관리 테이블 (`users`)
+### 1. `users`
 
-| 컬럼 명 | 데이터 타입 (MySQL 기준) | Null 허용 | 설명 |
+| 컬럼 | 타입 | 제약 | 설명 |
 | :--- | :--- | :--- | :--- |
-| `user_id` | `VARCHAR(50)` | NO | 사용자 ID (Primary Key) |
-| `password_hash` | `VARCHAR(255)` | NO | 비밀번호 해시 값 (보안 필수) |
-| `is_admin` | `BOOLEAN` | NO | Admin 권한 여부 (`True`/`False`) |
-| `is_approved` | `BOOLEAN` | NO | 가입 승인 여부 (Admin 메뉴에서 관리) |
-| `created_at` | `DATETIME` | NO | 사용자 생성 시각 |
+| `user_id` | VARCHAR(50) | PK | 사용자 ID |
+| `password_hash` | VARCHAR(255) | NOT NULL | bcrypt 해시 비밀번호 |
+| `module_name` | VARCHAR(50) | NOT NULL | 소속/모듈명 저장 |
+| `is_admin` | BOOLEAN | NOT NULL DEFAULT FALSE | 관리자 여부 |
+| `is_approved` | BOOLEAN | NOT NULL DEFAULT FALSE | 승인 여부 |
+| `created` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
 
-### 2. 📝 RTD 환경 설정 테이블 (`rtd_config`)
+> init.sql에서 `admin` 계정이 기본 삽입(승인/관리자 true, 사전 해시 비밀번호).
 
-| 컬럼 명 | 데이터 타입 (MySQL 기준) | Null 허용 | 설명 |
+### 2. `host_config`
+
+| 컬럼 | 타입 | 제약 | 설명 |
 | :--- | :--- | :--- | :--- |
-| `id` | `INT` | NO | 자동 증가 Primary Key |
-| `business_unit` | `VARCHAR(100)` | NO | 사업부 명 |
-| `development_line` | `VARCHAR(100)` | NO | 개발 라인 명 (사업부에 종속) |
-| `home_dir_path` | `VARCHAR(255)` | NO | 해당 라인의 Home Directory 경로 |
-| `is_target_line` | `BOOLEAN` | NO | 이 라인이 Test 대상 타겟 라인으로 사용 가능한지 여부 |
+| `ip` | VARCHAR(100) | PK | 개발 서버 IP(고유) |
+| `user_id` | VARCHAR(100) | NOT NULL | 접속 계정 ID |
+| `password` | VARCHAR(255) | NOT NULL | 접속 계정 비밀번호 |
+| `created` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
 
-### 3. 🎯 ezDFS 환경 설정 테이블 (`ezdfs_config`)
+### 3. `rtd_config`
 
-| 컬럼 명 | 데이터 타입 (MySQL 기준) | Null 허용 | 설명 |
+| 컬럼 | 타입 | 제약 | 설명 |
 | :--- | :--- | :--- | :--- |
-| `id` | `INT` | NO | 자동 증가 Primary Key |
-| `target_server_name` | `VARCHAR(100)` | NO | 타겟 서버 명 |
-| `dir_path` | `VARCHAR(255)` | NO | 서버 내 Rule Directory 경로 |
+| `line_name` | VARCHAR(50) | PK | 라인 이름(고유) |
+| `line_id` | VARCHAR(50) | NOT NULL | 라인 ID |
+| `business_unit` | VARCHAR(50) | NOT NULL | 사업부 이름 |
+| `home_dir_path` | VARCHAR(255) | NOT NULL | Rule 탐색용 홈 디렉터리 |
+| `host` | VARCHAR(100) | FK → `host_config.ip` (ON DELETE RESTRICT) | 테스트 대상 개발 서버 |
+| `created` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
+| `modifier` | VARCHAR(50) | NULL | 수정자 기록 |
 
-### 4. ⭐ 사용자 즐겨찾기 테이블 (`user_favorites`)
+### 4. `ezdfs_config`
 
-| 컬럼 명 | 데이터 타입 (MySQL 기준) | Null 허용 | 설명 |
+| 컬럼 | 타입 | 제약 | 설명 |
 | :--- | :--- | :--- | :--- |
-| `id` | `INT` | NO | 자동 증가 Primary Key |
-| `user_id` | `VARCHAR(50)` | NO | 사용자 ID (Foreign Key to `users`) |
-| `rule_name` | `VARCHAR(100)` | NO | 즐겨찾는 Rule 이름 |
-| `target_server_id` | `INT` | YES | 관련 타겟 서버 ID (Foreign Key to `ezdfs_config`) |
+| `module_name` | VARCHAR(50) | PK | 대상 모듈/서버 이름 |
+| `port_num` | VARCHAR(50) | NOT NULL | 대상 포트 |
+| `home_dir_path` | VARCHAR(255) | NOT NULL | Rule 디렉터리 경로 |
+| `host` | VARCHAR(100) | FK → `host_config.ip` (ON DELETE RESTRICT) | 테스트 대상 개발 서버 |
+| `created` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
+| `modifier` | VARCHAR(50) | NULL | 수정자 |
 
-### 5. 📜 테스트 결과 추적 테이블 (`test_results`)
+### 5. `user_rtd_favorites`
 
-| 컬럼 명 | 데이터 타입 (MySQL 기준) | Null 허용 | 설명 |
+| 컬럼 | 타입 | 제약 | 설명 |
 | :--- | :--- | :--- | :--- |
-| `task_id` | `VARCHAR(100)` | NO | 비동기 작업 Task ID (Primary Key) |
-| `user_id` | `VARCHAR(50)` | NO | 요청 사용자 ID (Foreign Key to `users`) |
-| `test_type` | `VARCHAR(10)` | NO | 테스트 종류 (`RTD` 또는 `EZDFS`) |
-| `raw_result_path` | `VARCHAR(255)` | YES | Raw Data 파일 저장 경로 |
-| `summary_result_path` | `VARCHAR(255)` | YES | 종합 결과 파일 저장 경로 |
-| `status` | `VARCHAR(20)` | NO | 작업 상태 (`PENDING`, `RUNNING`, `SUCCESS`, `FAILED`) |
-| `request_time` | `DATETIME` | NO | 테스트 요청 시각 |
-| `rtd_old_version` | `VARCHAR(50)` | YES | RTD Only: Old Rule 버전 정보 |
-| `rtd_new_version` | `VARCHAR(50)` | YES | RTD Only: New Rule 버전 정보 |
+| `id` | INT | PK, AUTO_INCREMENT | 고유 ID |
+| `user_id` | VARCHAR(50) | FK → `users.user_id` (ON DELETE CASCADE) | 사용자 ID |
+| `line_name` | VARCHAR(50) | FK → `rtd_config.line_name` (ON DELETE SET NULL) | 관련 라인 |
+| `rule_name` | VARCHAR(50) | NOT NULL | 즐겨찾기 Rule |
+| `created` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
+
+### 6. `user_ezfds_favorites`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+| :--- | :--- | :--- | :--- |
+| `id` | INT | PK, AUTO_INCREMENT | 고유 ID |
+| `user_id` | VARCHAR(50) | FK → `users.user_id` (ON DELETE CASCADE) | 사용자 ID |
+| `module_name` | VARCHAR(50) | FK → `ezdfs_config.module_name` (ON DELETE SET NULL) | 모듈명 |
+| `rule_name` | VARCHAR(50) | NOT NULL | 즐겨찾기 Rule |
+| `created` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
+
+### 7. `test_results`
+
+| 컬럼 | 타입 | 제약 | 설명 |
+| :--- | :--- | :--- | :--- |
+| `task_id` | VARCHAR(100) | PK | 비동기 작업 ID |
+| `user_id` | VARCHAR(50) | FK → `users.user_id` (ON DELETE CASCADE) | 요청 사용자 |
+| `test_type` | VARCHAR(10) | NOT NULL | `RTD` 또는 `EZDFS` 구분 |
+| `raw_result_path` | VARCHAR(255) | NULL | Raw 데이터 경로 |
+| `summary_result_path` | VARCHAR(255) | NULL | 종합 결과 경로 |
+| `status` | VARCHAR(20) | NOT NULL | `PENDING`/`RUNNING`/`SUCCESS`/`FAILED` |
+| `request_time` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 요청 시각 |
+| `rtd_old_version` | VARCHAR(50) | NULL | RTD만: Old 버전 |
+| `rtd_new_version` | VARCHAR(50) | NULL | RTD만: New 버전 |
