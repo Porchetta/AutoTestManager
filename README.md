@@ -1,106 +1,105 @@
-# MSS Test Manager
+# MSS 테스트 매니저
 
-A web-based platform for automating RTD and ezDFS test script execution.
+RTD 및 ezDFS 테스트 스크립트 실행을 자동화하는 웹 기반 플랫폼입니다.
 
-## 🏗 Architecture
+## 🏗 아키텍처
 
-- **Frontend**: Vue 3 + Vite + Pinia (Port: 40203)
-- **Backend**: FastAPI + SQLAlchemy (Port: 40223)
-- **Database**: MySQL 8.0 (Port: 3306)
-- **Infrastructure**: Docker Compose
+- **프런트엔드**: Vue 3 + Vite + Pinia (포트: 40203)
+- **백엔드**: FastAPI + SQLAlchemy (포트: 40223)
+- **데이터베이스**: MySQL 8.0 (포트: 3306)
+- **인프라**: Docker Compose
 
-## 🚀 Getting Started
+## 🚀 시작하기
 
-### Prerequisites
-- Docker & Docker Compose installed.
+### 사전 준비
+- Docker 및 Docker Compose 설치
 
-### Installation & Run
+### 설치 및 실행
 
-1. **Clone the repository** (if not already done).
-2. **Start the services**:
+1. **저장소를 클론**합니다(이미 클론했다면 건너뜁니다).
+2. **서비스를 시작**합니다:
    ```bash
    docker-compose up --build -d
    ```
-3. **Access the application**:
-   - Frontend: [http://localhost:40203](http://localhost:40203)
-   - Backend API Docs: [http://localhost:40223/docs](http://localhost:40223/docs)
+3. **애플리케이션에 접속**합니다:
+   - 프런트엔드: [http://localhost:40203](http://localhost:40203)
+   - 백엔드 API 문서: [http://localhost:40223/docs](http://localhost:40223/docs)
 
-### Offline run with prebuilt images
-If you need to deploy on an offline environment, build and save the images on a machine with internet access, then load and run them offline.
+### 사전 빌드 이미지를 사용한 오프라인 실행
+인터넷이 없는 환경에 배포해야 한다면, 인터넷이 되는 장비에서 이미지를 빌드·저장한 뒤 오프라인 환경에서 로드하여 실행하세요.
 
-1. **Build and tag images online**:
+1. **온라인에서 이미지 빌드 및 태그 지정**:
    ```bash
    docker compose build
    docker tag autotestmanager-frontend:latest mss-frontend:offline
    docker tag autotestmanager-backend:latest mss-backend:offline
-   # mysql:8.0 is pulled automatically; save it too if the offline host lacks the image
+   # mysql:8.0은 자동으로 pull되므로, 오프라인 호스트에 이미지가 없다면 함께 저장하세요
    ```
-2. **Save images to portable tarballs** (store them under `./images`):
+2. **이미지를 휴대용 tar 파일로 저장**(`./images` 아래에 보관 권장):
    ```bash
    mkdir -p images
    docker save mss-frontend:offline -o images/frontend.tar
    docker save mss-backend:offline -o images/backend.tar
    docker save mysql:8.0 -o images/db.tar
    ```
-3. **Transfer the repository and tarballs** to the offline host.
-4. **Run the offline helper** (loads images and starts containers without rebuilding):
+3. **저장소와 tar 파일을 오프라인 호스트로 전송**합니다.
+4. **오프라인 헬퍼 스크립트 실행**(이미지를 로드하고 빌드 없이 컨테이너를 시작):
    ```bash
    ./offline-run.sh
    ```
-   - Override tar locations or tags if needed:
+   - 필요하면 tar 경로나 태그를 덮어쓸 수 있습니다:
      ```bash
      FRONTEND_TAR=/path/frontend.tar BACKEND_TAR=/path/backend.tar DB_TAR=/path/db.tar \
      FRONTEND_IMAGE=my-frontend:prod BACKEND_IMAGE=my-backend:prod DB_IMAGE=mysql:8.0 \
      ./offline-run.sh
      ```
 
-### Offline build (no internet on the build host)
-If you must also **build** in an offline environment, prefetch dependencies online, copy the `./offline` folder, then build without
-network access.
+### 오프라인 빌드(빌드 호스트도 인터넷이 없을 때)
+빌드 환경에도 네트워크가 없다면, 온라인에서 의존성을 미리 수집해 `./offline` 폴더를 복사한 뒤 네트워크 없이 빌드하세요.
 
-1. **Prefetch online** (fills Python wheels + npm cache under `./offline`):
+1. **온라인에서 미리 준비**(Python wheel과 npm 캐시가 `./offline` 아래에 채워집니다):
    ```bash
    ./offline-prep.sh
    ```
-2. **Copy to the offline host**: transfer the repo and the generated `./offline` directory.
-3. **Build offline using cached deps** (requires python+pip, node+npm, docker already installed offline):
+2. **오프라인 호스트로 복사**: 저장소와 생성된 `./offline` 디렉터리를 전송합니다.
+3. **캐시된 의존성으로 오프라인 빌드**(오프라인 환경에 python+pip, node+npm, docker가 설치되어 있어야 합니다):
    ```bash
    ./offline-build.sh
    ```
-   - Installs backend deps from `offline/pip-wheels` via `pip install --no-index`.
-   - Installs frontend deps from `offline/npm-cache` via `npm ci --offline`.
-   - Builds both images with `--network=none` to ensure no internet is used.
-4. **Run**: either `./offline-run.sh` (if you saved images) or `docker compose up -d` with the offline-built images.
-   - The offline compose file (`docker-compose.offline.yml`) only uses prebuilt images—no source code is bind-mounted—so each image already contains the app code snapshot from the time you built it. Rebuild/tag fresh images if you change the backend or frontend source.
+   - 백엔드 의존성은 `offline/pip-wheels`에서 `pip install --no-index`로 설치됩니다.
+   - 프런트엔드 의존성은 `offline/npm-cache`에서 `npm ci --offline`으로 설치됩니다.
+   - 두 이미지 모두 `--network=none`으로 빌드해 인터넷 사용을 차단합니다.
+4. **실행**: 이미지를 저장했다면 `./offline-run.sh`, 또는 오프라인에서 빌드한 이미지를 이용해 `docker compose up -d`를 실행합니다.
+   - 오프라인 컴포즈 파일(`docker-compose.offline.yml`)은 사전 빌드된 이미지만 사용하며, 소스 코드를 바인드 마운트하지 않습니다. 백엔드나 프런트엔드 소스를 변경했다면 새로 빌드·태그한 이미지를 사용하세요.
 
-### Initial Login
-- **Username**: `admin`
-- **Password**: `admin123` (Note: Change this immediately after first login via My Page or Admin tools)
+### 초기 로그인 정보
+- **아이디**: `admin`
+- **비밀번호**: `admin123` (첫 로그인 후 "마이 페이지" 또는 관리자 도구에서 반드시 변경하세요)
 
-## 📂 Project Structure
+## 📂 프로젝트 구조
 
 ```
 /AutoTestManager
-├── backend/            # FastAPI Application
+├── backend/            # FastAPI 애플리케이션
 │   ├── app/
-│   │   ├── routers/    # API Endpoints (Auth, Admin, RTD, ezDFS)
-│   │   ├── models.py   # DB Models
+│   │   ├── routers/    # API 엔드포인트 (Auth, Admin, RTD, ezDFS)
+│   │   ├── models.py   # DB 모델
 │   │   └── ...
 │   └── Dockerfile
-├── frontend/           # Vue 3 Application
+├── frontend/           # Vue 3 애플리케이션
 │   ├── src/
-│   │   ├── views/      # Page Components
-│   │   ├── stores/     # Pinia State Management
+│   │   ├── views/      # 페이지 컴포넌트
+│   │   ├── stores/     # Pinia 상태 관리
 │   │   └── ...
 │   └── Dockerfile
-├── database/           # Database Scripts
+├── database/           # 데이터베이스 스크립트
 │   └── init.sql
 └── docker-compose.yml
 ```
 
-## 🧪 Features
+## 🧪 주요 기능
 
-- **RTD Test**: Step-by-step wizard for running RTD tests on specific lines.
-- **ezDFS Test**: Select server and rule to run tests, with favorites support.
-- **Admin Management**: Manage users (approve/promote) and system configurations.
-- **My Page**: View history and change password.
+- **RTD 테스트**: 특정 라인에 대한 RTD 테스트를 단계별로 실행할 수 있는 마법사.
+- **ezDFS 테스트**: 서버와 룰을 선택해 테스트를 실행하고 즐겨찾기를 지원.
+- **관리자 기능**: 사용자 승인/승격 및 시스템 설정 관리.
+- **마이 페이지**: 이력 조회 및 비밀번호 변경.
