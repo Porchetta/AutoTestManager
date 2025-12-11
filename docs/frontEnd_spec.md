@@ -63,10 +63,38 @@
 
 ## 👑 Admin 화면 (`/admin`)
 
-- **User Management**: 전체 사용자 목록 조회, 승인/회수(`PUT /users/{id}/status`), Admin 승격/강등(`PUT /users/{id}/role`) 기능 제공.
-- **Hosts**: 개발 서버 접속 정보를 IP/user_id/password로 등록/삭제. 모든 RTD/ezDFS 테스트는 등록된 호스트를 통해 실행되므로 설정 전에 `/api/admin/hosts` 로 호스트를 준비해야 함.
-- **RTD Config**: line_name/line_id/business_unit/home_dir_path/host/modifier 입력 후 추가, 항목 삭제 기능. 모든 데이터는 `/api/admin/rtd/configs` 로 CRUD.
-- **ezDFS Config**: module_name/port/home_dir_path/host/modifier 입력 후 추가 및 삭제. `/api/admin/ezdfs/configs` 로 CRUD.
+`Admin.vue`는 4개의 탭으로 구성되며, 하나의 탭 선택시 해당하는 페이지를 보여준다.
+
+- **User**: 전체 사용자 목록 조회, 삭제, admin 권한 부여
+    - DB의 user table 조회하여 user name, user id, module name, created 순으로 table 형태로 표시 (정렬기능 제공)
+    - 모든 사용자 row의 우측 끝에 admin 토글 버튼(**슬라이드 토글 버튼**), delete 버튼(**X 이모티콘 버튼**) 표시
+    - 승인되지 않은 사용자의 경우 승인 버튼(**체크 이모티콘 버튼**) 표시
+    - 승인 버튼 (`PUT /users/{id}/status`) 기능 제공
+    - 삭제 버튼 (`DELETE /users/{id}`) 기능 제공
+    - Admin 토글 버튼 on/off를 통해 승격/강등(`PUT /users/{id}/role`) 기능 제공.
+- **Hosts**: 개발 서버 접속 정보를 등록/삭제. 
+    - 모든 RTD/ezDFS 테스트는 등록된 호스트를 통해 실행되므로 사전에 `/api/admin/hosts` 로 호스트를 준비해야 함.
+    - DB의 host_config table 조회하여 host name, ip, user, password 순으로 table 형태로 표시 (정렬기능 제공)
+        - password는 * 보안을 위해 *로 변경하여 표시
+    - 모든 host row의 우측 끝에 delete 버튼(**X 이모티콘 버튼**) 표시
+    - 삭제 버튼 (`DELETE /hosts/{name}`) 기능 제공 (삭제 대상 host가 rtd_config, ezdfs_config에 등록되어 있는 경우 삭제 실패)
+    - table 우측 상단에 **추가** 버튼 (`POST /hosts`) 기능 제공
+    - 추가 버튼 클릭시 모달 팝업으로 host 정보를 name/ip/user_id/password로 등록
+    - 추가, 항목 삭제 기능. 모든 데이터는 `/api/admin/hosts` 로 CRUD.
+- **RTD Config**: RTD 라인별 접속 정보를 등록/삭제
+    - DB의 rtd_config table 조회하여 line_name, line_id, business_unit, home_dir_path, host, modifier 순으로 table 형태로 표시 (정렬기능 제공)
+    - 모든 row의 우측 끝에 delete 버튼(**X 이모티콘 버튼**) 표시
+    - 삭제 버튼 (`DELETE /rtd/configs/{line_name}`) 기능 제공
+    - table 우측 상단에 **추가** 버튼 (`POST /rtd/configs`) 기능 제공
+    - 추가 버튼 클릭시 모달 팝업으로 rtd config 정보를 line_name/line_id/business_unit/home_dir_path/host/modifier로 등록
+    - 추가, 항목 삭제 기능. 모든 데이터는 `/api/admin/rtd/configs` 로 CRUD.
+- **ezDFS Config**: ezdfs 모듈별 접속 정보를 등록/삭제
+    - DB의 ezdfs_config table 조회하여 module_name, port, home_dir_path, host, modifier 순으로 table 형태로 표시 (정렬기능 제공)
+    - 모든 row의 우측 끝에 delete 버튼(**X 이모티콘 버튼**) 표시
+    - 삭제 버튼 (`DELETE /ezdfs/configs/{module_name}`) 기능 제공
+    - table 우측 상단에 **추가** 버튼 (`POST /ezdfs/configs`) 기능 제공
+    - 추가 버튼 클릭시 모달 팝업으로 ezdfs config 정보를 module_name/port/home_dir_path/host/modifier로 등록
+    - 추가, 항목 삭제 기능. 모든 데이터는 `/api/admin/ezdfs/configs` 로 CRUD.
 
 ---
 

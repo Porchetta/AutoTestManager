@@ -20,6 +20,7 @@
 | :--- | :--- | :--- | :--- |
 | `user_id` | VARCHAR(50) | PK | 사용자 ID |
 | `password_hash` | VARCHAR(255) | NOT NULL | bcrypt 해시 비밀번호 |
+| `user_name` | VARCHAR(50) | NOT NULL | 사용자 이름 |
 | `module_name` | VARCHAR(50) | NOT NULL | 소속/모듈명 저장 |
 | `is_admin` | BOOLEAN | NOT NULL DEFAULT FALSE | 관리자 여부 |
 | `is_approved` | BOOLEAN | NOT NULL DEFAULT FALSE | 승인 여부 |
@@ -31,7 +32,8 @@
 
 | 컬럼 | 타입 | 제약 | 설명 |
 | :--- | :--- | :--- | :--- |
-| `ip` | VARCHAR(100) | PK | 개발 서버 IP(고유) |
+| `name` | VARCHAR(100) | PK | 개발 서버 이름(고유) |
+| `ip` | VARCHAR(100) | NOT NULL | 개발 서버 IP |
 | `user_id` | VARCHAR(100) | NOT NULL | 접속 계정 ID |
 | `password` | VARCHAR(255) | NOT NULL | 접속 계정 비밀번호 |
 | `created` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
@@ -44,7 +46,7 @@
 | `line_id` | VARCHAR(50) | NOT NULL | 라인 ID |
 | `business_unit` | VARCHAR(50) | NOT NULL | 사업부 이름 |
 | `home_dir_path` | VARCHAR(255) | NOT NULL | Rule 탐색용 홈 디렉터리 |
-| `host` | VARCHAR(100) | FK → `host_config.ip` (ON DELETE RESTRICT) | 테스트 대상 개발 서버 |
+| `host` | VARCHAR(100) | FK → `host_config.name` (ON DELETE RESTRICT) | 테스트 대상 개발 서버 |
 | `created` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
 | `modifier` | VARCHAR(50) | NULL | 수정자 기록 |
 
@@ -55,7 +57,7 @@
 | `module_name` | VARCHAR(50) | PK | 대상 모듈/서버 이름 |
 | `port_num` | VARCHAR(50) | NOT NULL | 대상 포트 |
 | `home_dir_path` | VARCHAR(255) | NOT NULL | Rule 디렉터리 경로 |
-| `host` | VARCHAR(100) | FK → `host_config.ip` (ON DELETE RESTRICT) | 테스트 대상 개발 서버 |
+| `host` | VARCHAR(100) | FK → `host_config.name` (ON DELETE RESTRICT) | 테스트 대상 개발 서버 |
 | `created` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 생성 시각 |
 | `modifier` | VARCHAR(50) | NULL | 수정자 |
 
