@@ -32,16 +32,23 @@
 
 | 스텝 | 주요 UI/동작 | 연동 API |
 | :--- | :--- | :--- |
-| **1. 사업부 선택** | 사업부 드롭다운 표시. 선택 시 이후 상태 초기화. | `GET /api/rtd/businesses` |
-| **2. 개발 라인 선택** | 선택한 사업부에 대한 라디오 카드 목록(line_name/line_id/home_dir_path). | `GET /api/rtd/lines?business_unit=` |
-| **3. Rule 선택** | 라인 기반 Rule 목록과 home_dir_path 표시. | `GET /api/rtd/rules?line_name=` |
-| **4. 버전 확인** | Old/New 버전 정보 표시. | `GET /api/rtd/rules/{rule_id}/versions` |
-| **5. 타겟 라인 선택/테스트 실행** | 체크박스 및 전체 선택. 이미 실행 중인 라인이 있으면 버튼 비활성. | `GET /api/rtd/target-lines?business_unit=` + `POST /api/rtd/test/start` |
-| **6. 진행/결과 다운로드** | 폴링으로 라인별 상태/진행률 표시, Raw 다운로드 버튼 제공. | `GET /api/rtd/test/status/{task_id}`, `GET /api/rtd/test/{task_id}/result/raw` |
-| **7. 종합 결과/마이페이지 이동** | 변경점 텍스트 입력 후 요약 생성/다운로드, 마이페이지 이동 또는 세션 초기화. | `POST /api/rtd/test/{task_id}/result/summary`, `DELETE /api/rtd/session` |
+| **1. 사업부 선택** | 사업부 드롭다운 표시 및 하나만 선택 가능. 선택 시 step 2로 전환하고 이후 상태 초기화. | `GET /api/rtd/businesses` |
+| **2. 개발 라인 선택** | 선택한 사업부에 대한 line_name 목록 드롭다운 표시 및 하나만 선택 가능. 선택 시 step 3-1로 전환. | `GET /api/rtd/lines?business_unit=` |
+| **3-1. Rule 선택** | 개발 라인 기반 Rule 목록 체크박스 표시. 선택 시 step 3-2로 전환. | `GET /api/rtd/rules?line_name=` |
+| **3-2. Macro 선택** | 선택한 Rule 목록 기반 Macro 목록 체크박스 표시. 선택 시 step 3-3로 전환. | `GET /api/rtd/macros?rule_name=` |
+| **3-3. 버전 확인** | Old/New 버전 정보 표시. 다음 버튼 클릭 시 step 4로 전환. | `GET /api/rtd/rules/{rule_name}/versions`<br>`GET /api/rtd/macros/{macro_name}/versions` |
+| **4. 타겟 라인 선택** | 선택한 사업부에 대한 line_name 목록 체크박스 및 전체 선택 제공. 선택 목록은 이후 테스트 테이블에 반영. | `GET /api/rtd/lines?business_unit=` |
+| **5. 테스트 진행 페이지** | 선택한 타겟 라인 목록을 table로 표시. line_name, old/new compile date(`-` 또는 `Date`), compile status(`-`/`FAIL`/`DONE`), test status(`-`/`WAIT`/`TESTING`/`DONE`)를 보여주며 컴파일/테스트 상호작용 시 로컬 상태로 즉시 갱신된다(초기값 `-`). | `GET /api/rtd/test/table?line_name=` |
+| **5-1. 새로고침** | table 상단 좌측 새로고침 버튼으로 최신 테이블 정보를 불러온다. | `GET /api/rtd/test/table?line_name=` |
+| **5-2. 복사** | table 상단 우측 복사 버튼. 선택된 타겟 라인에 Rule을 복사한다. | `POST /api/rtd/test/copy?line_name=&rule_name=&macro_name=` |
+| **5-3. 컴파일** | table 상단 우측 컴파일 버튼. 타겟 라인 대상 Rule을 컴파일한다. | `POST /api/rtd/test/compile?line_name=&rule_name=&macro_name=` |
+| **5-4. 테스트** | table 상단 우측 테스트 버튼. 타겟 라인 대상 테스트를 실행하며 각 요청마다 `task_id`를 생성한다. | `POST /api/rtd/test/start?line_name=&rule_name=` |
+| **5-5. 다운로드** | table 상단 우측 다운로드 버튼. test status 컬럼이 모두 `DONE`일 때 활성화되며 rawData.zip을 내려받는다. | `GET /api/rtd/test/result/rawdata` |
+| **5-6. 결과서 생성 이동** | table 상단 우측 결과서 생성 버튼. test status 컬럼이 모두 `DONE`일 때 활성화되며 step 6으로 이동한다. | - |
+| **6. 결과서 생성** | 주요 변경항목(약 200자 내외) 입력 후 테스트 결과서를 다운로드한다. | `POST /api/rtd/test/result?contents=` |
 
-- 테스트 실행 중엔 `hasRunningLines` 기준으로 실행 버튼을 잠그며, 단계 이동 시마다 세션을 갱신한다.
-- Raw/종합 결과는 alert로 파일 경로를 노출하여 다운로드 트리거 위치를 안내한다.
+- 각 라인별로 test 요청이 여러 번 들어올 수 있어 라인별 test queue에 요청을 보내고 응답을 받는 방식으로 동작한다.
+- test status와 compile status는 세션이 만료되지 않는 한 라인별 변수로 유지되며, 새로고침 시에도 유지된다.
 
 ---
 
