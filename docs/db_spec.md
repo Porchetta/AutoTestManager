@@ -94,3 +94,5 @@
 | `request_time` | DATETIME | NOT NULL DEFAULT CURRENT_TIMESTAMP | 요청 시각 |
 | `rtd_old_version` | VARCHAR(50) | NULL | RTD만: Old 버전 |
 | `rtd_new_version` | VARCHAR(50) | NULL | RTD만: New 버전 |
+
+> RTD Rule/Macro 목록 및 버전 정보는 파일 시스템/외부 연동으로 조회하며 별도 테이블을 두지 않는다. 컴파일/테스트 상태는 프론트/백엔드 세션 메모리에 유지되고, 완료된 테스트만 `test_results`에 기록된다.

@@ -43,21 +43,23 @@
 
 - 모든 RTD 테스트는 `rtd_config.host`가 가리키는 개발 서버를 대상으로 실행하도록 설계되어 있으며, 호스트 정보는 `host_config` 테이블에서 관리한다(name을 키로 참조).
 
-- **사업부/라인/Rule**
+- **사업부/라인/Rule/Macro/버전**
   - `GET /businesses`: DB에서 사업부 목록 조회(없으면 Memory/Foundry/NRD 기본값 반환).
   - `GET /lines?business_unit=`: 사업부에 속한 라인(line_name, line_id, home_dir_path).
-  - `GET /rules?line_name=`: 해당 라인의 home_dir_path를 기반으로 모의 Rule 목록과 경로 반환.
-  - `GET /rules/{rule_id}/versions`: Old/New 버전 하드코딩 응답.
-  - `GET /target-lines?business_unit=`: 사업부에 속한 타겟 라인명 리스트 반환.
+  - `GET /rules?line_name=`: 선택 라인의 home_dir_path 기반 Rule 목록 반환.
+  - `GET /macros?rule_name=`: 선택 Rule에 종속된 Macro 목록 반환.
+  - `GET /rules/{rule_name}/versions`, `GET /macros/{macro_name}/versions`: Old/New 버전 정보 반환.
 
-- **테스트 실행/상태** (메모리 상태 + DB `test_results` 동기화)
-  - `POST /test/start`: 중복 실행 여부 검사 후 UUID task 생성, 라인별 상태 `PENDING` 저장 후 백그라운드 작업 시작.
-  - `GET /test/status/{task_id}`: 전체 상태 및 라인별 진행률/Raw 경로를 반환.
-  - `GET /test/{task_id}/result/raw`(+`line_name` optional): 전체 번들 또는 라인별 Raw 파일 경로 반환(성공 상태만 허용).
-  - `POST /test/{task_id}/result/summary?summary_text=`: 모든 라인이 `SUCCESS`일 때 요약 파일 경로 생성 후 저장.
+- **테이블/복사·컴파일·테스트 실행** (메모리 상태 + DB `test_results` 동기화)
+  - `GET /test/table?line_name=`: 선택한 라인들의 최근 컴파일/테스트 시각과 상태를 조회.
+  - `POST /test/copy?line_name=&rule_name=&macro_name=`: 타겟 라인에 Rule/Macro 복사.
+  - `POST /test/compile?line_name=&rule_name=&macro_name=`: 타겟 라인을 대상으로 컴파일 요청, 상태를 `DONE`/`FAIL` 등으로 업데이트.
+  - `POST /test/start?line_name=&rule_name=`: 타겟 라인을 대상으로 테스트 요청, 라인별 queue에 넣어 상태를 `WAIT`→`TESTING`→`DONE`으로 변경.
+  - `GET /test/result/rawdata`: 모든 타겟의 테스트가 `DONE`일 때 rawData.zip 경로 반환.
+  - `POST /test/result?contents=`: 결과서 생성 및 다운로드 경로 반환(모든 라인 `DONE` 조건).
 
 - **세션 유지**
-  - `GET/PUT/DELETE /session`: 사용자별 진행 단계/선택값을 서버 메모리에 저장, 초기화 지원.
+  - `GET/PUT/DELETE /session`: 사용자별 진행 단계/선택값과 라인별 compile/test 상태를 서버 메모리에 저장, 새로고침 후 복원 가능하도록 지원.
 
 ---
 
