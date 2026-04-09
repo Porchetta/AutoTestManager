@@ -1,41 +1,58 @@
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .database import engine, Base, wait_for_db
-from .routers import auth, admin, rtd, ezdfs, mypage
 
-# Wait for DB to be ready
-wait_for_db()
+from app.api.admin import router as admin_router
+from app.api.auth import router as auth_router
+from app.api.ezdfs import router as ezdfs_router
+from app.api.mypage import router as mypage_router
+from app.api.rtd import router as rtd_router
+from app.core.config import get_settings
+from app.db.session import init_db
+from app.services.bootstrap import ensure_default_admin, ensure_storage_dirs
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+settings = get_settings()
 
-app = FastAPI(title="MSS Test Manager API", version="1.0.0")
 
-# CORS Configuration
-origins = [
-    "http://localhost",
-    "http://localhost:5173",
-    "http://localhost:40203",
-]
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    ensure_storage_dirs()
+    init_db()
+    ensure_default_admin()
+    yield
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(admin.router)
-app.include_router(rtd.router)
-app.include_router(ezdfs.router)
-app.include_router(mypage.router)
+app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(rtd_router)
+app.include_router(ezdfs_router)
+app.include_router(mypage_router)
 
-@app.get("/")
-def read_root():
-    return {"message": "Welcome to MSS Test Manager API"}
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {
+        "success": True,
+        "data": {
+            "app_name": settings.app_name,
+            "status": "ok",
+            "env": settings.app_env,
+        },
+    }
