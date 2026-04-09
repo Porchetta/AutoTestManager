@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+
+class RtdSessionPayload(BaseModel):
+    current_step: int = 1
+    selected_business_unit: str | None = None
+    selected_line_name: str | None = None
+    selected_rules: list[str] = Field(default_factory=list)
+    selected_macros: list[str] = Field(default_factory=list)
+    selected_versions: dict[str, str] = Field(default_factory=dict)
+    target_lines: list[str] = Field(default_factory=list)
+    active_task_ids: list[str] = Field(default_factory=list)
+
+
+class EzdfsSessionPayload(BaseModel):
+    selected_module: str | None = None
+    selected_rule: str | None = None
+    active_task_id: str | None = None
+    latest_status: str | None = None
+
+
+class RtdActionRequest(BaseModel):
+    target_lines: list[str] = Field(default_factory=list)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class EzdfsActionRequest(BaseModel):
+    module_name: str
+    rule_name: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
