@@ -9,13 +9,16 @@ from app.core.responses import success_response
 from app.models.entities import User
 from app.schemas.testing import (
     RtdActionRequest,
+    RtdMacroCompareRequest,
     RtdSessionPayload,
 )
 from app.services.catalog_service import (
+    compare_macros_by_rule_targets,
     get_business_units,
     get_lines_by_business_unit,
     get_macros_by_rule_name,
     get_rule_versions,
+    get_rule_versions_by_line_name,
     get_rules_by_line_name,
     get_target_lines_by_business_unit,
 )
@@ -51,8 +54,12 @@ def lines(
 
 
 @router.get("/rules")
-def rules(line_name: str):
-    return success_response({"items": get_rules_by_line_name(line_name)})
+def rules(
+    line_name: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return success_response({"items": get_rules_by_line_name(db, current_user, line_name)})
 
 
 @router.get("/macros")
@@ -60,9 +67,36 @@ def macros(rule_name: str):
     return success_response({"items": get_macros_by_rule_name(rule_name)})
 
 
+@router.post("/macros/compare")
+def compare_macros(
+    payload: RtdMacroCompareRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = compare_macros_by_rule_targets(db, current_user, payload.line_name, payload.selected_rule_targets)
+    except Exception as exc:  # noqa: BLE001
+        result = {
+            "old_macros": ["error"],
+            "new_macros": ["error"],
+            "has_diff": False,
+            "error": str(exc),
+        }
+
+    session_payload = get_runtime_session_payload(db, current_user.user_id, TestType.RTD)
+    session_payload["macro_review"] = result
+    upsert_runtime_session(db, current_user.user_id, TestType.RTD, session_payload)
+    return success_response(result)
+
+
 @router.get("/versions/rules")
-def rule_versions(rule_name: str):
-    return success_response({"items": get_rule_versions(rule_name)})
+def rule_versions(
+    rule_name: str,
+    line_name: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return success_response({"items": get_rule_versions_by_line_name(db, current_user, line_name, rule_name)})
 
 
 @router.get("/versions/macros")
@@ -94,7 +128,14 @@ def save_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    session = upsert_runtime_session(db, current_user.user_id, TestType.RTD, payload.model_dump())
+    existing_payload = get_runtime_session_payload(db, current_user.user_id, TestType.RTD)
+    session_payload = payload.model_dump()
+
+    cached_catalog = existing_payload.get("catalog_cache")
+    if cached_catalog and cached_catalog.get("line_name") == session_payload.get("selected_line_name"):
+        session_payload["catalog_cache"] = cached_catalog
+
+    session = upsert_runtime_session(db, current_user.user_id, TestType.RTD, session_payload)
     return success_response({"session": session})
 
 
@@ -229,4 +270,3 @@ def download_summary(
         filename=path.name,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-
