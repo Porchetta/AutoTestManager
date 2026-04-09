@@ -481,14 +481,59 @@ request:
 - `GET /api/rtd/business-units`
 - `GET /api/rtd/lines?business_unit={value}`
 - `GET /api/rtd/rules?line_name={value}`
-- `GET /api/rtd/macros?rule_name={value}`
-- `GET /api/rtd/versions/rules?rule_name={value}`
+- `POST /api/rtd/macros/compare`
+- `GET /api/rtd/versions/rules?rule_name={value}&line_name={value}`
 - `GET /api/rtd/versions/macros?macro_name={value}`
 - `GET /api/rtd/target-lines?business_unit={value}`
 
 정책:
-- 현재 단계에서는 설정값 기반 또는 mock 데이터 기반 반환 허용
-- 프론트 wizard를 진행할 수 있을 정도의 일관된 데이터가 필요하다
+- 개발 라인 선택 후 Rule / Version 목록은 RTD 설정의 `host_name`, `home_dir_path`를 기준으로 실제 개발 서버에 SSH 접속해 조회한다
+- 조회 결과는 사용자별 RTD 세션 payload의 `catalog_cache`에 저장한다
+- `catalog_cache`에는 최소 아래 정보가 포함된다
+  - `line_name`
+  - `files`
+  - `rules`
+  - `versions`
+  - `error`
+- `files` 항목은 아래 구조를 사용한다
+```json
+{
+  "file_name": "RULE_A_PC1.0.0.rule",
+  "rule_name": "RULE_A",
+  "version": "1.0.0"
+}
+```
+- `version`은 세션 저장 시 `.rule` 접미사를 제거한 값으로 저장한다
+- Rule 또는 Version 조회 실패 시 `rules`는 `["error"]`를 반환할 수 있다
+
+Rule / Version 파싱 정책:
+- SSH 접속 후 `home_dir_path`로 이동한다
+- 해당 디렉터리의 파일 목록을 읽는다
+- 파일명에 `_PC`가 포함된 경우
+  - `_PC` 앞부분은 `rule_name`
+  - `_PC` 뒷부분은 `version`
+- `version` 저장 시 `.rule`은 제거한다
+
+### 13.1.1 Macro 비교 정책
+- `POST /api/rtd/macros/compare`는 Step 3에서 선택한 Rule target 목록을 받아 old/new rule 파일을 비교한다
+- 각 Rule target에 대해 세션 cache에서 `rule_name + version`으로 원본 `file_name`을 찾는다
+- 해당 파일을 SSH로 읽어 `.rule` 파일 내용을 가져온다
+- macro list는 파일 내용을 줄 단위로 파싱해서 생성한다
+- 빈 줄은 제외한다
+- `//`, `#`, `;`로 시작하는 주석 줄은 제외한다
+- 줄 끝 주석 제거 후 남은 텍스트를 macro 항목으로 사용한다
+- old file과 new file 내용이 다른 경우에만 old/new macro 차이를 계산한다
+- 응답 예시:
+```json
+{
+  "success": true,
+  "data": {
+    "old_macros": ["MACRO_A", "MACRO_B"],
+    "new_macros": ["MACRO_C"],
+    "has_diff": true
+  }
+}
+```
 
 ### 13.2 세션 API
 - `GET /api/rtd/session`
@@ -498,21 +543,30 @@ request:
 `PUT /api/rtd/session` payload 예시:
 ```json
 {
-  "current_step": 7,
+  "current_step": 6,
   "selected_business_unit": "MSS",
   "selected_line_name": "LINE_A",
   "selected_rules": ["RULE_01", "RULE_02"],
-  "selected_macros": ["MACRO_01"],
-  "selected_versions": {
-    "rule_old": "1.0.0",
-    "rule_new": "1.1.0",
-    "macro_old": "2.0.0",
-    "macro_new": "2.1.0"
+  "selected_rule_targets": [
+    {
+      "rule_name": "RULE_01",
+      "old_version": "1.0.0",
+      "new_version": "1.1.0"
+    }
+  ],
+  "macro_review": {
+    "old_macros": ["MACRO_A"],
+    "new_macros": ["MACRO_B"],
+    "has_diff": true
   },
   "target_lines": ["LINE_B", "LINE_C"],
   "active_task_ids": ["task-001", "task-002"]
 }
 ```
+
+정책:
+- `catalog_cache`는 Rule / Version SSH 조회 결과를 담는 내부 세션 데이터다
+- 일반 세션 저장 시 같은 `selected_line_name`이면 기존 `catalog_cache`를 유지한다
 
 ### 13.3 실행 제어 API
 - `POST /api/rtd/actions/copy`

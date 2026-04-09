@@ -236,7 +236,8 @@
 - `modifier`, `actions` 컬럼은 폭을 안정적으로 유지해 표가 틀어지지 않게 한다.
 
 ### 6.5 RTD Test 화면
-- 7단계 Wizard 형식으로 구현
+- 6단계 Manager 형식으로 구현
+- 상단 단계 선택 바 + 좌측 작업 영역 + 우측 요약 패널 구조를 사용한다.
 
 #### Step 1. 사업부 선택
 - 단일 선택
@@ -245,23 +246,31 @@
 #### Step 2. 개발 라인 선택
 - Step 1의 사업부 기준으로 목록 조회
 - 단일 선택
+- 개발 라인을 선택하면 백엔드가 해당 라인의 RTD 설정을 기준으로 개발 서버에 SSH 접속해 Rule / Version catalog를 준비한다.
 
 #### Step 3. Rule 선택
 - line 기준 Rule 목록 조회
+- 단순 체크박스 방식이 아니라 누적 추가 방식으로 동작한다.
+- 세부 흐름
+  - `Rule 선택`
+  - `Old version 선택`
+  - `New version 선택`
+  - `추가`
+- 추가된 Rule target 목록을 별도로 표시한다.
+- 같은 Rule 조합은 중복 추가하지 않는다.
+- Rule / Version 목록을 가져오지 못하면 Rule 드롭다운에 `error`가 표시된다.
+
+#### Step 4. Macro 확인
+- Step 3에서 추가된 Rule target들의 old/new rule 파일을 기준으로 macro 차이를 계산한다.
+- old rule 파일과 new rule 파일의 내용이 다른 경우에만 macro 차이를 보여준다.
+- 화면은 `Old Macro`, `New Macro` 2개 영역으로 구성한다.
+- macro 선택 입력은 두지 않고, 차이 확인 용도로만 표시한다.
+- macro 조회 실패 시 오류 메시지를 표시한다.
+
+#### Step 5. 타겟 라인 선택
 - 다중 선택
 
-#### Step 4. Macro 선택
-- 선택한 Rule 기준 Macro 목록 조회
-- 다중 선택
-
-#### Step 5. Rule / Macro 버전 선택
-- Rule / Macro 각각 Old / New 버전 목록 표시
-- 각각 단일 선택
-
-#### Step 6. 타겟 라인 선택
-- 다중 선택
-
-#### Step 7. Test Manage
+#### Step 6. Test Manage
 - 복사, 컴파일, 테스트, 재테스트 실행
 - 결과서 생성 / 다운로드
 - RawData 다운로드
@@ -273,6 +282,7 @@
 - 새로고침 시 마지막 상태 복원
 - 진행 중 라인은 버튼 중복 클릭 방지
 - 완료된 라인만 다운로드 버튼 활성화
+- Rule / Version / Macro 확인 결과는 서버 세션 기준으로 복원 가능해야 한다
 
 ### 6.6 ezDFS Test 화면
 - 3단계 플로우로 구현
