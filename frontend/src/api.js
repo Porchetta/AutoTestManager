@@ -1,35 +1,83 @@
-import axios from 'axios';
+import axios from 'axios'
 
-const api = axios.create({
-    baseURL: '/api', // Proxy handles the rest
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
-// Request interceptor to add Token
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => Promise.reject(error)
-);
+export const http = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
 
-// Response interceptor to handle 401
-api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        if (error.response && error.response.status === 401) {
-            // Token expired or invalid
-            localStorage.removeItem('token');
-            window.location.href = '/login';
-        }
-        return Promise.reject(error);
+let authStoreGetter = null
+let uiStoreGetter = null
+let routerGetter = null
+
+export function registerApiContext({ getAuthStore, getUiStore, getRouter }) {
+  authStoreGetter = getAuthStore
+  uiStoreGetter = getUiStore
+  routerGetter = getRouter
+}
+
+http.interceptors.request.use((config) => {
+  const authStore = authStoreGetter?.()
+  if (authStore?.token) {
+    config.headers.Authorization = `Bearer ${authStore.token}`
+  }
+  return config
+})
+
+http.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const uiStore = uiStoreGetter?.()
+    const authStore = authStoreGetter?.()
+    const router = routerGetter?.()
+
+    if (error.response?.status === 401 && authStore) {
+      authStore.logoutLocal()
+      router?.push('/login')
     }
-);
 
-export default api;
+    const detail = error.response?.data?.error?.message || error.response?.data?.detail || error.message
+    uiStore?.setError(typeof detail === 'string' ? detail : '요청 처리 중 오류가 발생했습니다.')
+    return Promise.reject(error)
+  },
+)
+
+export async function apiGet(url, config = {}) {
+  const { data } = await http.get(url, config)
+  return data.data
+}
+
+export async function apiPost(url, payload = {}, config = {}) {
+  const { data } = await http.post(url, payload, config)
+  return data.data
+}
+
+export async function apiPut(url, payload = {}, config = {}) {
+  const { data } = await http.put(url, payload, config)
+  return data.data
+}
+
+export async function apiDelete(url, config = {}) {
+  const response = await http.delete(url, config)
+  return response.data?.data ?? null
+}
+
+export async function downloadFile(url, filenameHint = 'download') {
+  const response = await http.get(url, { responseType: 'blob' })
+  const blobUrl = window.URL.createObjectURL(response.data)
+  const link = document.createElement('a')
+  const disposition = response.headers['content-disposition']
+  const fileNameMatch = disposition?.match(/filename="?([^"]+)"?/)
+  link.href = blobUrl
+  link.download = fileNameMatch?.[1] || filenameHint
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(blobUrl)
+}
+
+export { API_BASE_URL }
+
