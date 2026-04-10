@@ -65,14 +65,18 @@ export async function apiDelete(url, config = {}) {
   return response.data?.data ?? null
 }
 
-export async function downloadFile(url, filenameHint = 'download') {
-  const response = await http.get(url, { responseType: 'blob' })
+export async function downloadFile(url, filenameHint = 'download', config = {}) {
+  const response = await http.get(url, { ...config, responseType: 'blob' })
   const blobUrl = window.URL.createObjectURL(response.data)
   const link = document.createElement('a')
   const disposition = response.headers['content-disposition']
-  const fileNameMatch = disposition?.match(/filename="?([^"]+)"?/)
+  const fileNameUtfMatch = disposition?.match(/filename\*=UTF-8''([^;]+)/i)
+  const fileNameMatch = disposition?.match(/filename="?([^";]+)"?/i)
+  const resolvedFileName = fileNameUtfMatch?.[1]
+    ? decodeURIComponent(fileNameUtfMatch[1])
+    : fileNameMatch?.[1]
   link.href = blobUrl
-  link.download = fileNameMatch?.[1] || filenameHint
+  link.download = resolvedFileName || filenameHint
   document.body.appendChild(link)
   link.click()
   link.remove()
@@ -80,4 +84,3 @@ export async function downloadFile(url, filenameHint = 'download') {
 }
 
 export { API_BASE_URL }
-

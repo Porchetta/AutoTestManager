@@ -16,6 +16,8 @@ export const useRtdStore = defineStore('rtd', () => {
   })
   const targetLines = ref([])
   const tasks = ref([])
+  const monitorItems = ref([])
+  const copyVisibilityMap = ref({})
 
   const businessUnits = ref([])
   const lines = ref([])
@@ -136,6 +138,7 @@ export const useRtdStore = defineStore('rtd', () => {
     if (selectedLineName.value) await loadRules()
     if (selectedRuleTargets.value.length) await loadMacroReview()
     await refreshTasks()
+    await refreshMonitor()
   }
 
   function resetAfterBusinessUnit() {
@@ -164,11 +167,53 @@ export const useRtdStore = defineStore('rtd', () => {
       payload: sessionPayload.value,
     })
     tasks.value = data.items
+    if (action === 'copy') {
+      for (const line of lines) {
+        copyVisibilityMap.value[line] = true
+      }
+    }
     await saveSession()
   }
 
   async function refreshTasks() {
     tasks.value = (await apiGet('/api/rtd/status')).items
+  }
+
+  async function refreshMonitor() {
+    if (!targetLines.value.length) {
+      monitorItems.value = []
+      return
+    }
+
+    monitorItems.value = (
+      await apiGet('/api/rtd/monitor', {
+        params: {
+          target_lines: targetLines.value.join(','),
+        },
+      })
+    ).items.map((item) => {
+      const copyStateVisible = copyVisibilityMap.value[item.target_name]
+      const copyStatus = item.copy?.status
+
+      if (copyStatus === 'RUNNING' || copyStatus === 'PENDING') {
+        copyVisibilityMap.value[item.target_name] = true
+        return item
+      }
+
+      if ((copyStatus === 'DONE' || copyStatus === 'FAIL') && copyStateVisible) {
+        return item
+      }
+
+      return {
+        ...item,
+        copy: {
+          ...(item.copy || {}),
+          status: 'IDLE',
+          status_text: '이력 없음',
+          message: '-',
+        },
+      }
+    })
   }
 
   async function generateSummary(taskId) {
@@ -184,6 +229,15 @@ export const useRtdStore = defineStore('rtd', () => {
     await downloadFile(`/api/rtd/results/${taskId}/summary`, `rtd_${taskId}_summary.xlsx`)
   }
 
+  async function downloadAggregateSummary() {
+    if (!targetLines.value.length) return
+    await downloadFile('/api/rtd/results/aggregate-summary', 'rtd_test_report.xlsx', {
+      params: {
+        target_lines: targetLines.value.join(','),
+      },
+    })
+  }
+
   return {
     currentStep,
     selectedBusinessUnit,
@@ -193,6 +247,7 @@ export const useRtdStore = defineStore('rtd', () => {
     targetLines,
     selectedRuleTargets,
     tasks,
+    monitorItems,
     businessUnits,
     lines,
     rules,
@@ -209,8 +264,10 @@ export const useRtdStore = defineStore('rtd', () => {
     resetAfterLine,
     executeAction,
     refreshTasks,
+    refreshMonitor,
     generateSummary,
     downloadRaw,
     downloadSummary,
+    downloadAggregateSummary,
   }
 })

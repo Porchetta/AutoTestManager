@@ -72,9 +72,10 @@
   - globalNotice
   - confirmDialogState
 - `rtdStore`
-  - RTD wizard 상태
+  - RTD Test Manager 상태
   - 세션 저장 / 복원 상태
   - task 상태 목록
+  - target monitor 상태
 - `ezdfsStore`
   - ezDFS 선택 상태
   - 세션 저장 / 복원 상태
@@ -237,7 +238,7 @@
 
 ### 6.5 RTD Test 화면
 - 6단계 Manager 형식으로 구현
-- 상단 단계 선택 바 + 좌측 작업 영역 + 우측 요약 패널 구조를 사용한다.
+- 상단 단계 선택 바 + 단일 작업 영역 + 하단 `Target Status Monitor` 구조를 사용한다.
 
 #### Step 1. 사업부 선택
 - 단일 선택
@@ -269,20 +270,47 @@
 
 #### Step 5. 타겟 라인 선택
 - 다중 선택
+- `전체 선택` 버튼으로 한 번에 선택 가능
+- 선택된 타겟 라인은 Step 6 monitor 기준이 된다.
 
-#### Step 6. Test Manage
-- 복사, 컴파일, 테스트, 재테스트 실행
-- 결과서 생성 / 다운로드
-- RawData 다운로드
-- 타겟별 상태 카드 표시
-- polling으로 상태 갱신
+#### Step 6. 실행 제어
+- 상단 액션 버튼 4개를 제공한다.
+  - `복사`
+  - `컴파일`
+  - `테스트`
+  - `테스트 결과서 생성`
+- 상단 `복사 / 컴파일 / 테스트`는 현재 선택된 모든 타겟 라인에 대해 한 번에 요청한다.
+- `테스트 결과서 생성`은 현재 선택된 타겟 라인들의 최신 테스트 결과를 모아 집계 결과서(`.xlsx`)를 다운로드한다.
+- 하단 `Target Status Monitor`는 타겟 라인별 카드형 모니터를 표시한다.
+- 각 카드에는 아래 항목이 표시된다.
+  - 라인명
+  - 현재 상태 chip
+  - `복사`
+  - `컴파일`
+  - `테스트`
+  - `Raw Data`
+- 현재 상태 chip은 간단한 운영 상태만 표시한다.
+  - `Copying [이름]`
+  - `Testing [이름]`
+  - `Compiling [이름]`
+  - `대기 [이름]`
+- 카드 내부 `복사 / 컴파일 / 테스트` 버튼은 해당 라인만 개별 실행한다.
+- 카드 내부 `Raw Data` 버튼은 해당 라인의 최신 테스트 raw data가 있을 때만 활성화된다.
+- `Raw Data` 버튼은 활성화 시 실제 저장된 파일명으로 `.txt`를 다운로드한다.
+- 액션 상태 표현 규칙
+  - 성공: `✅`
+  - 실패: `❌`
+  - 진행중 / 대기중: spinner
+- 실패한 경우에만 hover title로 예외 원인을 보여준다.
+- polling으로 상태를 주기적으로 갱신한다.
 
 #### RTD 화면 추가 요구사항
 - 스텝 이동 시 현재 상태를 서버 세션에 저장
 - 새로고침 시 마지막 상태 복원
-- 진행 중 라인은 버튼 중복 클릭 방지
-- 완료된 라인만 다운로드 버튼 활성화
+- 동일 사용자 + 동일 액션 + 동일 타겟의 중복 요청은 백엔드 정책상 제한될 수 있다
+- Raw Data는 결과가 있는 라인만 다운로드 버튼 활성화
 - Rule / Version / Macro 확인 결과는 서버 세션 기준으로 복원 가능해야 한다
+- `복사` 결과 표시는 현재 페이지 수명 동안만 유지되고, 브라우저 새로고침 후에는 다시 초기화될 수 있다
 
 ### 6.6 ezDFS Test 화면
 - 3단계 플로우로 구현
@@ -324,6 +352,7 @@
 - 인증 토큰 자동 첨부
 - 공통 에러 핸들링 적용
 - 파일 다운로드는 Blob 응답 처리
+- 다운로드 파일명은 서버의 `Content-Disposition`을 우선 사용한다
 
 ## 8. 컴포넌트 / UI 구성 기준
 - `MainLayout`
@@ -331,8 +360,9 @@
 - `ConfirmModal`
 - `Toast`
 - `Admin Tabs`
-- `Step Wizard`
-- `Status Card`
+- `Step Manager`
+- `Operation Console`
+- `Target Status Monitor Card`
 - `Result Download Panel`
 
 공통 스타일 규칙:
@@ -352,7 +382,7 @@
 ## 10. 개발 산출물
 - Vue 3 SPA 프로젝트
 - 공통 레이아웃 및 인증 구조
-- RTD Test Wizard 화면
+- RTD Test Manager 화면
 - ezDFS Test Manager 화면
 - Admin 관리 화면
 - My Page 화면
