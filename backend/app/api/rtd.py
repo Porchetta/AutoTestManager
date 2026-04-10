@@ -16,17 +16,20 @@ from app.services.catalog_service import (
     compare_macros_by_rule_targets,
     get_business_units,
     get_lines_by_business_unit,
-    get_macros_by_rule_name,
-    get_rule_versions,
     get_rule_versions_by_line_name,
     get_rules_by_line_name,
     get_target_lines_by_business_unit,
 )
-from app.services.file_service import generate_summary_file, get_existing_download_path
+from app.services.file_service import (
+    generate_aggregate_rtd_summary_file,
+    generate_summary_file,
+    get_existing_download_path,
+)
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
 from app.services.task_service import (
     create_test_task,
     ensure_task_owner,
+    list_rtd_target_monitor_items,
     list_tasks_by_type,
     queue_mock_task,
     serialize_task,
@@ -62,11 +65,6 @@ def rules(
     return success_response({"items": get_rules_by_line_name(db, current_user, line_name)})
 
 
-@router.get("/macros")
-def macros(rule_name: str):
-    return success_response({"items": get_macros_by_rule_name(rule_name)})
-
-
 @router.post("/macros/compare")
 def compare_macros(
     payload: RtdMacroCompareRequest,
@@ -97,11 +95,6 @@ def rule_versions(
     db: Session = Depends(get_db),
 ):
     return success_response({"items": get_rule_versions_by_line_name(db, current_user, line_name, rule_name)})
-
-
-@router.get("/versions/macros")
-def macro_versions(macro_name: str):
-    return success_response({"items": get_rule_versions(macro_name)})
 
 
 @router.get("/target-lines")
@@ -225,6 +218,17 @@ def list_status(
     return success_response({"items": [serialize_task(task) for task in items]})
 
 
+@router.get("/monitor")
+def monitor_status(
+    target_lines: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    target_items = [item.strip() for item in target_lines.split(",") if item.strip()]
+    items = list_rtd_target_monitor_items(db, target_items, current_user.user_id)
+    return success_response({"items": items})
+
+
 @router.get("/status/{task_id}")
 def get_status(
     task_id: str,
@@ -265,6 +269,21 @@ def download_summary(
 ):
     task = ensure_task_owner(db, task_id, current_user.user_id, TestType.RTD)
     path = get_existing_download_path(task, kind="summary")
+    return FileResponse(
+        path=path,
+        filename=path.name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@router.get("/results/aggregate-summary")
+def download_aggregate_summary(
+    target_lines: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    target_items = [item.strip() for item in target_lines.split(",") if item.strip()]
+    path = generate_aggregate_rtd_summary_file(db, current_user.user_id, target_items)
     return FileResponse(
         path=path,
         filename=path.name,
