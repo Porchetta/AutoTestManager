@@ -474,8 +474,8 @@ async function deleteEzdfs(moduleName) {
         </button>
       </div>
 
-      <div class="admin-tab-panel">
-        <div v-if="activeTab === 'users'" class="table-wrap">
+      <div class="admin-tab-panel admin-console-panel">
+        <div v-if="activeTab === 'users'" class="table-wrap console-grid-table">
           <div class="panel-head user-filter-bar">
             <label class="compact-filter">
               <span class="compact-filter-label">Module</span>
@@ -566,8 +566,8 @@ async function deleteEzdfs(moduleName) {
           </table>
         </div>
 
-        <div v-else-if="activeTab === 'hosts'" class="admin-grid">
-          <form class="panel-subcard" @submit.prevent="createHost">
+        <div v-else-if="activeTab === 'hosts'" class="admin-grid admin-console-grid">
+          <form class="panel-subcard admin-form-panel" @submit.prevent="createHost">
             <h3>Host 추가</h3>
             <label class="field"><span>Name</span><input v-model="hostForm.name" /></label>
             <label class="field"><span>IP</span><input v-model="hostForm.ip" /></label>
@@ -575,7 +575,7 @@ async function deleteEzdfs(moduleName) {
             <label class="field"><span>Login Password</span><input v-model="hostForm.login_password" type="password" /></label>
             <button class="button button-primary" type="submit">등록</button>
           </form>
-          <div class="table-wrap">
+          <div class="table-wrap console-grid-table">
             <table class="data-table">
               <thead>
                 <tr>
@@ -696,8 +696,8 @@ async function deleteEzdfs(moduleName) {
           </div>
         </div>
 
-        <div v-else-if="activeTab === 'rtd'" class="admin-grid">
-          <form class="panel-subcard" @submit.prevent="createRtdConfig">
+        <div v-else-if="activeTab === 'rtd'" class="admin-grid admin-console-grid">
+          <form class="panel-subcard admin-form-panel" @submit.prevent="createRtdConfig">
             <h3>RTD Config 추가</h3>
             <label class="field"><span>Line Name</span><input v-model="rtdForm.line_name" /></label>
             <label class="field"><span>Line ID</span><input v-model="rtdForm.line_id" /></label>
@@ -712,7 +712,7 @@ async function deleteEzdfs(moduleName) {
             </label>
             <button class="button button-primary" type="submit">등록</button>
           </form>
-          <div class="table-wrap">
+          <div class="table-wrap console-grid-table">
             <div class="panel-head user-filter-bar">
               <label class="compact-filter">
                 <span class="compact-filter-label">사업부</span>
@@ -838,8 +838,8 @@ async function deleteEzdfs(moduleName) {
           </div>
         </div>
 
-        <div v-else class="admin-grid">
-          <form class="panel-subcard" @submit.prevent="createEzdfsConfig">
+        <div v-else class="admin-grid admin-console-grid">
+          <form class="panel-subcard admin-form-panel" @submit.prevent="createEzdfsConfig">
             <h3>ezDFS Config 추가</h3>
             <label class="field"><span>Module Name</span><input v-model="ezdfsForm.module_name" /></label>
             <label class="field"><span>Port</span><input v-model="ezdfsForm.port" type="number" /></label>
@@ -853,7 +853,7 @@ async function deleteEzdfs(moduleName) {
             </label>
             <button class="button button-primary" type="submit">등록</button>
           </form>
-          <div class="table-wrap">
+          <div class="table-wrap console-grid-table">
             <table class="data-table">
               <thead>
                 <tr>
