@@ -223,15 +223,19 @@ def _build_rtd_target_monitor_item(
         [ActionType.TEST.value, ActionType.RETEST.value],
     )
 
-    raw_download_task = next(
+    latest_user_test_task = next(
         (
             task
             for task in target_tasks
             if task.user_id == current_user_id
             and task.action_type in {ActionType.TEST.value, ActionType.RETEST.value}
-            and bool(task.raw_result_path)
         ),
         None,
+    )
+    raw_download_task = (
+        latest_user_test_task
+        if latest_user_test_task is not None and bool(latest_user_test_task.raw_result_path)
+        else None
     )
 
     return {
