@@ -98,7 +98,7 @@ def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not verify_password(payload.current_password, current_user.password_hash):
+    if payload.current_password and not verify_password(payload.current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -122,4 +122,3 @@ def change_password(
 @router.get("/me")
 def me(current_user: User = Depends(get_current_user)):
     return success_response({"user": UserResponse.model_validate(current_user).model_dump()})
-
