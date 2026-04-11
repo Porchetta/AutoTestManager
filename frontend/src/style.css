@@ -415,12 +415,8 @@ p { margin: 0; }
 
 .hero-panel {
   min-height: 200px;
-  background: linear-gradient(135deg, var(--accent-tint) 0%, var(--panel) 55%);
-  border-color: var(--accent-weak);
-}
-
-[data-theme='dark'] .hero-panel {
-  background: linear-gradient(135deg, var(--accent-weak), var(--panel) 60%);
+  background: var(--panel);
+  border-color: var(--border);
 }
 
 .panel-head,
@@ -661,10 +657,7 @@ select option {
   align-items: center;
   min-height: 100vh;
   padding: 48px;
-  background:
-    radial-gradient(ellipse at top left, var(--accent-tint) 0%, transparent 55%),
-    radial-gradient(ellipse at bottom right, var(--secondary-weak) 0%, transparent 50%),
-    var(--bg);
+  background: var(--bg);
 }
 
 .auth-hero {
@@ -745,6 +738,10 @@ select option {
 .task-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+}
+
+.monitor-board {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .compact-grid {
@@ -903,8 +900,8 @@ select option {
   margin-bottom: 18px;
   padding: 18px 20px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--accent-weak);
-  background: linear-gradient(135deg, var(--accent-tint), var(--panel));
+  border: 1px solid var(--border);
+  background: var(--panel-sunken);
 }
 
 .manager-banner-copy h4 {
@@ -1241,7 +1238,8 @@ select option {
 
 /* ---------- Operation Console ---------- */
 .operation-console {
-  display: block;
+  display: flex;
+  justify-content: flex-start;
 }
 
 .operation-console-main,
@@ -1253,20 +1251,79 @@ select option {
 }
 
 .operation-console-main-full {
-  /* width: 100%; */
   width: fit-content;
+  max-width: 100%;
 }
 
-.operation-button-grid {
+.operation-process-head {
   display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
+}
+
+.operation-process-rail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.operation-process-sequence {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.operation-process-step {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
+}
+
+.operation-process-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.operation-process-arrow {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.operation-process-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 40px;
+  background: rgba(127, 167, 186, 0.1);
+}
+
+.operation-process-execute {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .operation-button {
   flex: 0 0 auto;
-  min-height: 38px;
-  padding: 8px 20px;
+  min-height: 42px;
+  padding: 10px 18px;
+  border-radius: 12px;
 }
 
 .operation-button strong {
@@ -1276,43 +1333,58 @@ select option {
 
 /* 복사 → 컴파일 → 테스트 → 결과서 생성: 단계별 accent 진행 */
 .operation-button-step-1 {
-  background: var(--accent-tint);
-  border-color: var(--accent-weak);
-  color: var(--accent-strong);
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text-soft);
 }
 .operation-button-step-1:hover {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border-color: var(--accent);
+  background: var(--bg-soft);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: var(--text);
 }
 
 .operation-button-step-2 {
-  background: color-mix(in srgb, var(--accent) 28%, var(--panel));
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
   color: var(--accent-strong);
 }
 .operation-button-step-2:hover {
-  background: color-mix(in srgb, var(--accent) 38%, var(--panel));
-  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
 }
 
 .operation-button-step-3 {
-  background: color-mix(in srgb, var(--accent) 60%, var(--panel));
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: color-mix(in srgb, var(--secondary) 10%, var(--panel));
+  border-color: color-mix(in srgb, var(--secondary) 34%, var(--border));
+  color: var(--secondary);
 }
 .operation-button-step-3:hover {
-  background: color-mix(in srgb, var(--accent) 78%, var(--panel));
-  border-color: var(--accent-strong);
+  background: color-mix(in srgb, var(--secondary) 18%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--secondary) 50%, var(--border));
 }
 
 .operation-button-step-4 {
-  background: var(--accent);
-  border-color: var(--accent-strong);
-  color: var(--on-accent);
+  background: color-mix(in srgb, var(--secondary) 8%, color-mix(in srgb, var(--accent) 10%, var(--panel)));
+  border-color: color-mix(in srgb, var(--secondary) 44%, var(--border));
+  color: var(--text);
 }
 .operation-button-step-4:hover {
+  background: color-mix(in srgb, var(--secondary) 14%, color-mix(in srgb, var(--accent) 14%, var(--bg-soft)));
+  border-color: color-mix(in srgb, var(--secondary) 58%, var(--border));
+}
+
+.operation-button-execute-all {
+  min-width: 0;
+  padding: 10px 14px;
+  justify-content: center;
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--secondary));
+  color: var(--on-accent);
+}
+
+.operation-button-execute-all:hover {
   background: var(--accent-strong);
-  border-color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent-strong) 72%, var(--secondary));
 }
 
 /* ---------- Stack List ---------- */
@@ -1763,21 +1835,22 @@ select option {
 
 .monitor-action-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .monitor-action-button {
   display: grid;
-  gap: 8px;
-  align-content: space-between;
-  min-height: 72px;
-  padding: 11px 12px;
+  gap: 5px;
+  align-content: center;
+  justify-items: center;
+  min-height: 52px;
+  padding: 6px 4px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
-  text-align: left;
+  text-align: center;
   font-weight: 600;
   transition: all 0.15s ease;
 }
@@ -1793,29 +1866,36 @@ select option {
 }
 
 .monitor-action-button strong {
-  font-size: 0.86rem;
+  font-size: 0.72rem;
   font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
 }
 
 .monitor-action-meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
+  min-height: 14px;
 }
 
 .monitor-action-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted-strong);
-  font-size: 0.74rem;
-  font-weight: 500;
+  display: none;
 }
 
 .monitor-action-emoji {
-  font-size: 1rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.monitor-action-emoji.is-success {
+  color: var(--success);
+}
+
+.monitor-action-emoji.is-fail {
+  color: var(--danger);
 }
 
 .monitor-action-button.is-success {
@@ -1893,7 +1973,6 @@ select option {
   place-items: center;
   padding: 20px;
   background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(4px);
 }
 
 [data-theme='dark'] .modal-overlay {
@@ -2113,8 +2192,13 @@ select option {
     grid-template-columns: 1fr;
   }
 
-  .operation-button-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .operation-process-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .operation-process-rail {
+    gap: 8px;
   }
 
   .rule-builder-row,
@@ -2128,6 +2212,10 @@ select option {
 
   .task-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .monitor-board {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -2163,12 +2251,47 @@ select option {
 
   .manager-inline-stats,
   .manager-step-strip,
-  .operation-button-grid,
   .rule-builder-row,
   .rule-toolbar-row,
   .selection-tray-list,
   .task-grid,
+  .monitor-board,
   .monitor-action-grid {
     grid-template-columns: 1fr;
+  }
+
+  .operation-process-rail {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .operation-process-sequence {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .operation-process-step {
+    width: 100%;
+  }
+
+  .operation-process-step .operation-button {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .operation-process-arrow {
+    display: none;
+  }
+
+  .operation-process-divider {
+    display: none;
+  }
+
+  .operation-process-execute {
+    width: 100%;
+  }
+
+  .operation-button-execute-all {
+    width: 100%;
   }
 }

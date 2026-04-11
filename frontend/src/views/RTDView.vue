@@ -29,7 +29,7 @@ const steps = [
   "Rule 선택",
   "Macro 확인",
   "타겟 라인 선택",
-  "실행 제어",
+  "Test 실행",
 ];
 
 const ruleCandidate = ref("");
@@ -37,6 +37,7 @@ const ruleCandidateNewVersion = ref("");
 const ruleCandidateOldVersion = ref("");
 const macroSearchLoading = ref(false);
 const resetFlowLoading = ref(false);
+const executeAllLoading = ref(false);
 
 function displayTargetLineName(targetLine) {
   return String(targetLine || "").replace(/_TARGET\b/gi, "");
@@ -69,9 +70,22 @@ function monitorStatusChip(item) {
   return "대기";
 }
 
-function monitorActionSummary(action) {
-  if (!action || action.status === "IDLE") return "이력 없음";
-  return action.status_text || "-";
+function monitorActionDisplay(status) {
+  const normalized = String(status || "").toUpperCase();
+  if (normalized === "DONE") return "✓";
+  if (normalized === "FAIL") return "✕";
+  return "";
+}
+
+function monitorActionIconClass(status) {
+  const normalized = String(status || "").toUpperCase();
+  if (normalized === "DONE") return "is-success";
+  if (normalized === "FAIL") return "is-fail";
+  return "";
+}
+
+function monitorDownloadDisplay(enabled) {
+  return enabled ? "⬇" : "—";
 }
 
 function monitorFailureReason(action) {
@@ -89,12 +103,6 @@ function monitorActionClass(status) {
 
 function showMonitorSpinner(status) {
   return status === "PENDING" || status === "RUNNING";
-}
-
-function monitorActionEmoji(status) {
-  if (status === "DONE") return "✅";
-  if (status === "FAIL") return "❌";
-  return "";
 }
 
 let pollId = null;
@@ -368,6 +376,65 @@ async function generateAggregateSummary() {
   uiStore.setNotice("테스트 결과서 생성이 완료되었습니다.");
 }
 
+async function executeAllProcess() {
+  if (executeAllLoading.value) {
+    return;
+  }
+
+  if (!targetLines.value.length) {
+    uiStore.setError("타겟 라인을 먼저 선택해주세요.");
+    return;
+  }
+
+  executeAllLoading.value = true;
+  try {
+    const copyItems = await rtdStore.executeAction("copy");
+    if (copyItems.length) {
+      const copyResults = await rtdStore.waitForTaskIds(
+        copyItems.map((item) => item.task_id),
+      );
+      if (copyResults.some((item) => item.status !== "DONE")) {
+        uiStore.setError("복사 단계에서 실패가 발생해 전체 실행을 중단했습니다.");
+        return;
+      }
+    }
+
+    const compileItems = await rtdStore.executeAction("compile");
+    if (!compileItems.length) {
+      uiStore.setError("컴파일 요청을 생성하지 못했습니다.");
+      return;
+    }
+    const compileResults = await rtdStore.waitForTaskIds(
+      compileItems.map((item) => item.task_id),
+    );
+    if (compileResults.some((item) => item.status !== "DONE")) {
+      uiStore.setError("컴파일 단계에서 실패가 발생해 전체 실행을 중단했습니다.");
+      return;
+    }
+
+    const testItems = await rtdStore.executeAction("test");
+    if (!testItems.length) {
+      uiStore.setError("테스트 요청을 생성하지 못했습니다.");
+      return;
+    }
+    const testResults = await rtdStore.waitForTaskIds(
+      testItems.map((item) => item.task_id),
+    );
+    if (testResults.some((item) => item.status !== "DONE")) {
+      uiStore.setError("테스트 단계에서 실패가 발생해 전체 실행을 중단했습니다.");
+      return;
+    }
+
+    await rtdStore.downloadAggregateSummary();
+    uiStore.setNotice("전체 프로세스가 완료되었습니다.");
+  } catch (error) {
+    uiStore.setError(error?.message || "전체 실행 중 오류가 발생했습니다.");
+  } finally {
+    await rtdStore.refreshMonitor();
+    executeAllLoading.value = false;
+  }
+}
+
 async function selectAllTargets() {
   targetLines.value = [...targetLineOptions.value];
   await rtdStore.saveSession();
@@ -618,20 +685,14 @@ async function resetFlow() {
                 <span>{{ macroSearchLoading ? "탐색중" : "탐색" }}</span>
               </button>
             </div>
-            <div
-              v-if="!macroReview.searched"
-              class="stack-item macro-state-panel"
-            >
-              <strong>Macro 미탐색</strong>
-            </div>
-            <div
-              v-else-if="macroReview.error"
-              class="stack-item macro-state-panel"
-            >
+            <div v-if="macroReview.error" class="stack-item macro-state-panel">
               <strong>Macro 조회 실패</strong>
               <p class="muted">{{ macroReview.error }}</p>
             </div>
-            <div v-else class="macro-review-grid macro-console-grid">
+            <div
+              v-else-if="macroReview.searched"
+              class="macro-review-grid macro-console-grid"
+            >
               <div class="panel-subcard macro-console-card">
                 <div class="panel-head">
                   <div class="macro-card-head-copy">
@@ -739,23 +800,7 @@ async function resetFlow() {
             <div class="manager-section-head">
               <div>
                 <p class="eyebrow">Step 5</p>
-                <div class="manager-section-title-inline">
-                  <h4>타겟 라인 선택</h4>
-                  <div class="macro-card-actions">
-                    <button
-                      class="button button-ghost macro-card-action"
-                      @click="selectAllTargets"
-                    >
-                      전체 선택
-                    </button>
-                    <button
-                      class="button button-ghost macro-card-action"
-                      @click="clearAllTargets"
-                    >
-                      전체 해제
-                    </button>
-                  </div>
-                </div>
+                <h4>타겟 라인 선택</h4>
               </div>
             </div>
             <div class="check-grid choice-grid-inline">
@@ -773,31 +818,89 @@ async function resetFlow() {
                 <span>{{ displayTargetLineName(item) }}</span>
               </label>
             </div>
+            <div class="macro-card-actions">
+              <button
+                class="button button-ghost macro-card-action"
+                @click="selectAllTargets"
+              >
+                전체 선택
+              </button>
+              <button
+                class="button button-ghost macro-card-action"
+                @click="clearAllTargets"
+              >
+                전체 해제
+              </button>
+            </div>
           </div>
 
           <div v-else class="wizard-block">
             <div class="manager-section-head">
               <div>
                 <p class="eyebrow">Step 6</p>
-                <h4>실행 제어</h4>
+                <h4>Test 실행</h4>
               </div>
             </div>
 
             <div class="operation-console">
               <div class="operation-console-main operation-console-main-full">
-                <div class="operation-button-grid">
-                  <button class="button operation-button operation-button-step-1" @click="run('copy')">
-                    <strong>복사</strong>
-                  </button>
-                  <button class="button operation-button operation-button-step-2" @click="run('compile')">
-                    <strong>컴파일</strong>
-                  </button>
-                  <button class="button operation-button operation-button-step-3" @click="run('test')">
-                    <strong>테스트</strong>
-                  </button>
-                  <button class="button operation-button operation-button-step-4" @click="generateAggregateSummary">
-                    <strong>결과서 생성</strong>
-                  </button>
+                <div class="operation-process-head">
+                  <p class="eyebrow">Process all</p>
+                </div>
+                <div class="operation-process-rail">
+                  <div class="operation-process-sequence">
+                    <div class="operation-process-step">
+                      <button
+                        class="button operation-button operation-button-step-1"
+                        @click="run('copy')"
+                      >
+                        <strong>복사</strong>
+                      </button>
+                    </div>
+                    <span class="operation-process-arrow" aria-hidden="true"
+                      >→</span
+                    >
+                    <div class="operation-process-step">
+                      <button
+                        class="button operation-button operation-button-step-2"
+                        @click="run('compile')"
+                      >
+                        <strong>컴파일</strong>
+                      </button>
+                    </div>
+                    <span class="operation-process-arrow" aria-hidden="true"
+                      >→</span
+                    >
+                    <div class="operation-process-step">
+                      <button
+                        class="button operation-button operation-button-step-3"
+                        @click="run('test')"
+                      >
+                        <strong>테스트</strong>
+                      </button>
+                    </div>
+                    <span class="operation-process-arrow" aria-hidden="true"
+                      >→</span
+                    >
+                    <div class="operation-process-step">
+                      <button
+                        class="button operation-button operation-button-step-4"
+                        @click="generateAggregateSummary"
+                      >
+                        <strong>결과서 생성</strong>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="operation-process-divider" aria-hidden="true"></div>
+                  <div class="operation-process-execute">
+                    <button
+                      class="button button-primary operation-button operation-button-execute-all"
+                      :disabled="executeAllLoading"
+                      @click="executeAllProcess"
+                    >
+                      <strong>{{ executeAllLoading ? "Executing..." : "Execute all" }}</strong>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -844,7 +947,7 @@ async function resetFlow() {
           <span>{{ resetFlowLoading ? "초기화중" : "초기화" }}</span>
         </button>
       </div>
-      <div class="task-grid">
+      <div class="task-grid monitor-board">
         <div
           v-for="item in monitorItems"
           :key="item.target_name"
@@ -874,14 +977,11 @@ async function resetFlow() {
             >
               <strong>복사</strong>
               <span class="monitor-action-meta">
-                <span class="monitor-action-text">{{
-                  monitorActionSummary(item.copy)
-                }}</span>
                 <span
-                  v-if="monitorActionEmoji(item.copy.status)"
-                  class="monitor-action-emoji"
+                  v-if="monitorActionDisplay(item.copy.status)"
+                  :class="['monitor-action-emoji', monitorActionIconClass(item.copy.status)]"
                 >
-                  {{ monitorActionEmoji(item.copy.status) }}
+                  {{ monitorActionDisplay(item.copy.status) }}
                 </span>
                 <span
                   v-if="showMonitorSpinner(item.copy.status)"
@@ -899,14 +999,11 @@ async function resetFlow() {
             >
               <strong>컴파일</strong>
               <span class="monitor-action-meta">
-                <span class="monitor-action-text">{{
-                  monitorActionSummary(item.compile)
-                }}</span>
                 <span
-                  v-if="monitorActionEmoji(item.compile.status)"
-                  class="monitor-action-emoji"
+                  v-if="monitorActionDisplay(item.compile.status)"
+                  :class="['monitor-action-emoji', monitorActionIconClass(item.compile.status)]"
                 >
-                  {{ monitorActionEmoji(item.compile.status) }}
+                  {{ monitorActionDisplay(item.compile.status) }}
                 </span>
                 <span
                   v-if="showMonitorSpinner(item.compile.status)"
@@ -924,14 +1021,11 @@ async function resetFlow() {
             >
               <strong>테스트</strong>
               <span class="monitor-action-meta">
-                <span class="monitor-action-text">{{
-                  monitorActionSummary(item.test)
-                }}</span>
                 <span
-                  v-if="monitorActionEmoji(item.test.status)"
-                  class="monitor-action-emoji"
+                  v-if="monitorActionDisplay(item.test.status)"
+                  :class="['monitor-action-emoji', monitorActionIconClass(item.test.status)]"
                 >
-                  {{ monitorActionEmoji(item.test.status) }}
+                  {{ monitorActionDisplay(item.test.status) }}
                 </span>
                 <span
                   v-if="showMonitorSpinner(item.test.status)"
@@ -949,9 +1043,9 @@ async function resetFlow() {
             >
               <strong>Raw Data</strong>
               <span class="monitor-action-meta">
-                <span class="monitor-action-text">{{
-                  item.raw_download.enabled ? "다운로드" : "없음"
-                }}</span>
+                <span class="monitor-action-emoji">
+                  {{ monitorDownloadDisplay(item.raw_download.enabled) }}
+                </span>
               </span>
             </button>
           </div>

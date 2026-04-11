@@ -288,6 +288,34 @@ export const useRtdStore = defineStore('rtd', () => {
     })
   }
 
+  function isTerminalTaskStatus(status) {
+    return ['DONE', 'FAIL', 'CANCELED'].includes(String(status || '').toUpperCase())
+  }
+
+  async function waitForTaskIds(taskIds, options = {}) {
+    const timeoutMs = options.timeoutMs ?? 15 * 60 * 1000
+    const intervalMs = options.intervalMs ?? 1500
+    const startedAt = Date.now()
+
+    if (!taskIds.length) {
+      return []
+    }
+
+    while (Date.now() - startedAt < timeoutMs) {
+      await refreshTasks()
+      await refreshMonitor()
+
+      const matchedTasks = tasks.value.filter((task) => taskIds.includes(task.task_id))
+      if (matchedTasks.length === taskIds.length && matchedTasks.every((task) => isTerminalTaskStatus(task.status))) {
+        return matchedTasks
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, intervalMs))
+    }
+
+    throw new Error('작업 완료 대기 시간이 초과되었습니다.')
+  }
+
   async function resetFlow() {
     try {
       await apiDelete('/api/rtd/session')
@@ -348,6 +376,7 @@ export const useRtdStore = defineStore('rtd', () => {
     downloadRaw,
     downloadSummary,
     downloadAggregateSummary,
+    waitForTaskIds,
     resetFlow,
   }
 })
