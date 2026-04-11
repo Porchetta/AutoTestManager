@@ -122,8 +122,8 @@ const selectionStats = computed(() => [
     value: !macroReview.value.searched
       ? "미탐색"
       : macroReview.value.error
-      ? "오류"
-      : `${selectedMacros.value.length}개`,
+        ? "오류"
+        : `${selectedMacros.value.length}개`,
   },
   {
     label: "타겟 라인",
@@ -279,7 +279,9 @@ async function toggleMacroSelection(macroName, checked) {
       selectedMacros.value = [...selectedMacros.value, macroName];
     }
   } else {
-    selectedMacros.value = selectedMacros.value.filter((item) => item !== macroName);
+    selectedMacros.value = selectedMacros.value.filter(
+      (item) => item !== macroName,
+    );
   }
 
   await rtdStore.saveSession();
@@ -287,7 +289,9 @@ async function toggleMacroSelection(macroName, checked) {
 
 async function selectAllMacros(macroType) {
   const sourceItems =
-    macroType === "old" ? macroReview.value.old_macros : macroReview.value.new_macros;
+    macroType === "old"
+      ? macroReview.value.old_macros
+      : macroReview.value.new_macros;
   const merged = [...new Set([...selectedMacros.value, ...sourceItems])];
   selectedMacros.value = merged;
   await rtdStore.saveSession();
@@ -295,9 +299,13 @@ async function selectAllMacros(macroType) {
 
 async function clearAllMacros(macroType) {
   const sourceItems =
-    macroType === "old" ? macroReview.value.old_macros : macroReview.value.new_macros;
+    macroType === "old"
+      ? macroReview.value.old_macros
+      : macroReview.value.new_macros;
   const sourceSet = new Set(sourceItems);
-  selectedMacros.value = selectedMacros.value.filter((item) => !sourceSet.has(item));
+  selectedMacros.value = selectedMacros.value.filter(
+    (item) => !sourceSet.has(item),
+  );
   await rtdStore.saveSession();
 }
 
@@ -414,15 +422,14 @@ async function resetFlow() {
 
       <div class="manager-banner">
         <div class="manager-banner-copy">
-          <p class="eyebrow">Workflow</p>
-          <h4>단계 선택과 실행 상태를 한 화면에서 관리합니다.</h4>
-          <p class="muted">
-            선택 상태는 서버 세션에 저장되며, 진행 중 작업은 상태 모니터에서
-            계속 확인할 수 있습니다.
-          </p>
+          <p class="eyebrow">RTD 개발자 Test Flow</p>
         </div>
         <div class="manager-inline-stats">
-          <div v-for="item in selectionStats" :key="item.label" class="mini-stat">
+          <div
+            v-for="item in selectionStats"
+            :key="item.label"
+            class="mini-stat"
+          >
             <span>{{ item.label }}</span>
             <strong>{{ item.value }}</strong>
           </div>
@@ -497,8 +504,8 @@ async function resetFlow() {
                 <h4>Rule 선택</h4>
               </div>
             </div>
-            <div class="rule-builder-card">
-              <div class="rule-builder-row">
+            <div class="rule-builder-card rule-toolbar-card">
+              <div class="rule-builder-row rule-toolbar-row">
                 <label class="field rule-builder-field">
                   <span>1. Rule 선택</span>
                   <select
@@ -546,9 +553,9 @@ async function resetFlow() {
               </div>
             </div>
 
-            <div class="manager-section-head">
+            <div class="manager-section-head manager-section-head-compact">
               <div>
-                <p class="eyebrow">Selected Rules</p>
+                <p class="eyebrow">Selection Tray</p>
                 <h4>추가된 테스트 대상 Rule</h4>
               </div>
               <span class="pill pill-ghost"
@@ -556,11 +563,14 @@ async function resetFlow() {
               >
             </div>
 
-            <div class="stack-list" v-if="selectedRuleTargets.length">
+            <div
+              class="stack-list selection-tray-list"
+              v-if="selectedRuleTargets.length"
+            >
               <div
                 v-for="(item, index) in selectedRuleTargets"
                 :key="`${item.rule_name}-${item.new_version}-${item.old_version}`"
-                class="stack-item rule-target-item"
+                class="stack-item rule-target-item selection-tray-item"
               >
                 <div class="rule-target-copy">
                   <strong>{{ item.rule_name }}</strong>
@@ -586,7 +596,7 @@ async function resetFlow() {
                 <h4>Macro 확인</h4>
               </div>
             </div>
-            <div class="manager-inline-actions">
+            <div class="manager-inline-actions macro-toolbar">
               <button
                 class="button button-primary manager-inline-action"
                 :disabled="macroSearchLoading || !selectedRuleTargets.length"
@@ -599,18 +609,24 @@ async function resetFlow() {
                 <span>{{ macroSearchLoading ? "탐색중" : "탐색" }}</span>
               </button>
             </div>
-            <div v-if="!macroReview.searched" class="stack-item">
+            <div
+              v-if="!macroReview.searched"
+              class="stack-item macro-state-panel"
+            >
               <strong>Macro 미탐색</strong>
               <p class="muted">
                 탐색 버튼을 눌러 선택된 Rule 기준으로 Macro 차이를 확인하세요.
               </p>
             </div>
-            <div v-else-if="macroReview.error" class="stack-item">
+            <div
+              v-else-if="macroReview.error"
+              class="stack-item macro-state-panel"
+            >
               <strong>Macro 조회 실패</strong>
               <p class="muted">{{ macroReview.error }}</p>
             </div>
-            <div v-else class="macro-review-grid">
-              <div class="panel-subcard">
+            <div v-else class="macro-review-grid macro-console-grid">
+              <div class="panel-subcard macro-console-card">
                 <div class="panel-head">
                   <div class="macro-card-head-copy">
                     <h4>Old Macro</h4>
@@ -635,7 +651,10 @@ async function resetFlow() {
                     </button>
                   </div>
                 </div>
-                <div class="stack-list" v-if="macroReview.old_macros.length">
+                <div
+                  class="stack-list macro-stack-list"
+                  v-if="macroReview.old_macros.length"
+                >
                   <div
                     v-for="item in macroReview.old_macros"
                     :key="`old-${item}`"
@@ -646,7 +665,9 @@ async function resetFlow() {
                       <input
                         :checked="isMacroSelected(item)"
                         type="checkbox"
-                        @change="toggleMacroSelection(item, $event.target.checked)"
+                        @change="
+                          toggleMacroSelection(item, $event.target.checked)
+                        "
                       />
                     </label>
                   </div>
@@ -654,7 +675,7 @@ async function resetFlow() {
                 <p v-else class="muted">차이가 있는 Old Macro가 없습니다.</p>
               </div>
 
-              <div class="panel-subcard">
+              <div class="panel-subcard macro-console-card">
                 <div class="panel-head">
                   <div class="macro-card-head-copy">
                     <h4>New Macro</h4>
@@ -679,7 +700,10 @@ async function resetFlow() {
                     </button>
                   </div>
                 </div>
-                <div class="stack-list" v-if="macroReview.new_macros.length">
+                <div
+                  class="stack-list macro-stack-list"
+                  v-if="macroReview.new_macros.length"
+                >
                   <div
                     v-for="item in macroReview.new_macros"
                     :key="`new-${item}`"
@@ -690,7 +714,9 @@ async function resetFlow() {
                       <input
                         :checked="isMacroSelected(item)"
                         type="checkbox"
-                        @change="toggleMacroSelection(item, $event.target.checked)"
+                        @change="
+                          toggleMacroSelection(item, $event.target.checked)
+                        "
                       />
                     </label>
                   </div>
@@ -746,16 +772,28 @@ async function resetFlow() {
             <div class="operation-console">
               <div class="operation-console-main operation-console-main-full">
                 <div class="operation-button-grid">
-                  <button class="button button-primary operation-button" @click="run('copy')">
+                  <button
+                    class="button button-primary operation-button"
+                    @click="run('copy')"
+                  >
                     <strong>복사</strong>
                   </button>
-                  <button class="button button-secondary operation-button" @click="run('compile')">
+                  <button
+                    class="button button-secondary operation-button"
+                    @click="run('compile')"
+                  >
                     <strong>컴파일</strong>
                   </button>
-                  <button class="button button-accent operation-button" @click="run('test')">
+                  <button
+                    class="button button-accent operation-button"
+                    @click="run('test')"
+                  >
                     <strong>테스트</strong>
                   </button>
-                  <button class="button button-ghost operation-button" @click="generateAggregateSummary">
+                  <button
+                    class="button button-ghost operation-button"
+                    @click="generateAggregateSummary"
+                  >
                     <strong>테스트 결과서 생성</strong>
                   </button>
                 </div>
@@ -764,7 +802,11 @@ async function resetFlow() {
           </div>
 
           <div class="wizard-actions">
-            <span v-if="currentStep === 1" class="wizard-actions-spacer" aria-hidden="true" />
+            <span
+              v-if="currentStep === 1"
+              class="wizard-actions-spacer"
+              aria-hidden="true"
+            />
             <button
               v-if="currentStep > 1"
               class="button button-ghost"
@@ -816,18 +858,18 @@ async function resetFlow() {
           </div>
 
           <div class="monitor-action-grid">
-                <button
-                  class="monitor-action-button"
-                  :class="monitorActionClass(item.copy.status)"
-                  :title="
-                    isDevLineTarget(item.target_name)
-                      ? '개발 라인은 복사 대상이 아닙니다.'
-                      : monitorFailureReason(item.copy)
-                  "
-                  type="button"
-                  :disabled="isDevLineTarget(item.target_name)"
-                  @click="runSingleAction('copy', item.target_name)"
-                >
+            <button
+              class="monitor-action-button"
+              :class="monitorActionClass(item.copy.status)"
+              :title="
+                isDevLineTarget(item.target_name)
+                  ? '개발 라인은 복사 대상이 아닙니다.'
+                  : monitorFailureReason(item.copy)
+              "
+              type="button"
+              :disabled="isDevLineTarget(item.target_name)"
+              @click="runSingleAction('copy', item.target_name)"
+            >
               <strong>복사</strong>
               <span class="monitor-action-meta">
                 <span class="monitor-action-text">{{
