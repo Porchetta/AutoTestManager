@@ -1,0 +1,13 @@
+2026-04-11 22:05:30 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:09:11 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:21:44 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=SSH connection failed for host=rtpgmss1: Error reading SSH protocol banner fallback=10
+2026-04-11 22:21:45 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:21:45 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:21:45 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:21:45 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:21:45 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:21:45 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:21:45 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:21:45 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:21:45 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-11 22:21:45 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=127.0.0.1 reason=Remote sshd maxstartups value is empty fallback=10

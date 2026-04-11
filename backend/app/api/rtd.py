@@ -39,6 +39,10 @@ from app.utils.enums import ActionType, TaskStep, TestType
 router = APIRouter(prefix="/api/rtd", tags=["rtd"])
 
 
+def _normalize_target_line_name(line_name: str) -> str:
+    return str(line_name or "").replace("_TARGET", "")
+
+
 @router.get("/business-units")
 def business_units(
     current_user: User = Depends(get_current_user),
@@ -73,8 +77,10 @@ def compare_macros(
 ):
     try:
         result = compare_macros_by_rule_targets(db, current_user, payload.line_name, payload.selected_rule_targets)
+        result["searched"] = True
     except Exception as exc:  # noqa: BLE001
         result = {
+            "searched": True,
             "old_macros": ["error"],
             "new_macros": ["error"],
             "has_diff": False,
@@ -152,8 +158,20 @@ def _create_rtd_tasks(
     if not payload.target_lines:
         raise HTTPException(status_code=422, detail="target_lines is required")
 
+    target_lines = payload.target_lines
+    if action_type == ActionType.COPY:
+        selected_line_name = str(payload.payload.get("selected_line_name", "")).strip()
+        target_lines = [
+            target_line
+            for target_line in payload.target_lines
+            if _normalize_target_line_name(target_line) != selected_line_name
+        ]
+
+    if not target_lines:
+        return success_response({"items": []})
+
     items = []
-    for target_line in payload.target_lines:
+    for target_line in target_lines:
         task = create_test_task(
             db=db,
             test_type=TestType.RTD,

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import posixpath
 import re
 import shlex
 
 from app.models.entities import HostConfig
+from app.services.ssh_runtime import open_limited_ssh_client
 
 
 def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[str]:
@@ -13,35 +15,18 @@ def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[s
     Customize this function if the offline environment needs a different rule
     file listing strategy.
     """
-    try:
-        import paramiko
-    except ModuleNotFoundError as exc:
-        raise RuntimeError("paramiko is not installed") from exc
-
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
     command = _build_clean_bash_command(
         f"cd {shlex.quote(home_dir_path)} && find . -maxdepth 1 -type f -printf \"%f\\n\""
     )
 
     try:
-        client.connect(
-            hostname=host.ip,
-            username=host.login_user,
-            password=host.login_password,
-            timeout=5,
-            auth_timeout=5,
-            banner_timeout=5,
-        )
-        _, stdout, stderr = client.exec_command(command, timeout=10)
-        exit_status = stdout.channel.recv_exit_status()
-        output = stdout.read().decode("utf-8", errors="ignore")
-        error_output = stderr.read().decode("utf-8", errors="ignore").strip()
+        with open_limited_ssh_client(host) as client:
+            _, stdout, stderr = client.exec_command(command, timeout=10)
+            exit_status = stdout.channel.recv_exit_status()
+            output = stdout.read().decode("utf-8", errors="ignore")
+            error_output = stderr.read().decode("utf-8", errors="ignore").strip()
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"SSH connection failed: {exc}") from exc
-    finally:
-        client.close()
 
     if exit_status != 0:
         raise RuntimeError(error_output or "Failed to list remote files")
@@ -88,35 +73,36 @@ def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) 
 
     Customize this function if rule contents must be loaded differently.
     """
-    try:
-        import paramiko
-    except ModuleNotFoundError as exc:
-        raise RuntimeError("paramiko is not installed") from exc
+    return read_remote_source_text(host, home_dir_path, file_name)
 
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+def read_macro_source_text(host: HostConfig, home_dir_path: str, macro_name: str) -> str:
+    """
+    Default implementation for reading a macro file.
+
+    Macro files are expected under `<home_dir_path>/../Macro`.
+    Customize this function if the macro directory or naming rule changes.
+    """
+    macro_dir = posixpath.normpath(posixpath.join(home_dir_path, "..", "Macro"))
+    return read_remote_source_text(host, macro_dir, macro_name)
+
+
+def read_remote_source_text(host: HostConfig, remote_dir_path: str, file_name: str) -> str:
+    """
+    Shared remote file reader used by both rule files and macro files.
+    """
     command = _build_clean_bash_command(
-        f"cd {shlex.quote(home_dir_path)} && cat {shlex.quote(file_name)}"
+        f"cd {shlex.quote(remote_dir_path)} && cat {shlex.quote(file_name)}"
     )
 
     try:
-        client.connect(
-            hostname=host.ip,
-            username=host.login_user,
-            password=host.login_password,
-            timeout=5,
-            auth_timeout=5,
-            banner_timeout=5,
-        )
-        _, stdout, stderr = client.exec_command(command, timeout=10)
-        exit_status = stdout.channel.recv_exit_status()
-        output = stdout.read().decode("utf-8", errors="ignore")
-        error_output = stderr.read().decode("utf-8", errors="ignore").strip()
+        with open_limited_ssh_client(host) as client:
+            _, stdout, stderr = client.exec_command(command, timeout=10)
+            exit_status = stdout.channel.recv_exit_status()
+            output = stdout.read().decode("utf-8", errors="ignore")
+            error_output = stderr.read().decode("utf-8", errors="ignore").strip()
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"SSH file read failed: {exc}") from exc
-    finally:
-        client.close()
 
     if exit_status != 0:
         raise RuntimeError(error_output or f"Failed to read remote file: {file_name}")
@@ -160,6 +146,59 @@ def extract_macro_list_from_rule_text(rule_text: str, rule_name: str) -> list[st
         seen.add(item)
         result.append(item)
     return result
+
+
+def resolve_recursive_macro_list(
+    host: HostConfig,
+    home_dir_path: str,
+    rule_text: str,
+    rule_name: str,
+) -> list[str]:
+    """
+    Resolve macros recursively.
+
+    Flow:
+    - read rule text
+    - find direct macros
+    - for each macro, read the corresponding macro file
+    - scan that macro text again for nested macros
+    - repeat recursively
+
+    The default implementation assumes:
+    - each macro name maps to a file with the same name
+    - macro files live under `<home_dir_path>/../Macro`
+
+    Missing nested macro files are ignored so the visible top-level macro list
+    still remains available.
+    """
+    resolved: list[str] = []
+    seen_macros: set[str] = set()
+    visited_macro_files: set[str] = set()
+
+    def walk_source_text(source_text: str, source_name: str) -> None:
+        for macro_name in extract_macro_list_from_rule_text(source_text, source_name):
+            normalized = str(macro_name or "").strip()
+            if not normalized or normalized == "error":
+                continue
+
+            if normalized not in seen_macros:
+                seen_macros.add(normalized)
+                resolved.append(normalized)
+
+            if normalized in visited_macro_files:
+                continue
+
+            visited_macro_files.add(normalized)
+
+            try:
+                nested_text = read_macro_source_text(host, home_dir_path, normalized)
+            except RuntimeError:
+                continue
+
+            walk_source_text(nested_text, normalized)
+
+    walk_source_text(rule_text, rule_name)
+    return resolved
 
 
 def _build_clean_bash_command(command: str) -> str:

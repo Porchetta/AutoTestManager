@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import EzdfsConfig, HostConfig, RtdConfig, User
 from app.services.rtd_catalog_custom import (
-    extract_macro_list_from_rule_text,
     fetch_rule_source_file_names,
     parse_rule_catalog_entries,
     read_rule_source_text,
+    resolve_recursive_macro_list,
 )
 from app.services.session_service import get_runtime_session_payload, upsert_runtime_session
 from app.utils.enums import TestType
@@ -130,7 +130,7 @@ def get_macro_list_by_rule_name(
         raise ValueError("Rule file not found in session cache")
 
     content = read_rule_source_text(host, config.home_dir_path, file_name)
-    return extract_macro_list_from_rule_text(content, rule_name)
+    return resolve_recursive_macro_list(host, config.home_dir_path, content, rule_name)
 
 
 def get_target_lines_by_business_unit(db: Session, business_unit: str, current_user: User) -> list[str]:

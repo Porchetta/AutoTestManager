@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import HostConfig, RtdConfig, TestTask
 from app.services.session_service import get_runtime_session_payload
+from app.services.ssh_runtime import open_limited_ssh_client
 from app.utils.enums import TestType
 
 
@@ -34,6 +35,9 @@ def execute_copy_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
 
     rule_file_names = _collect_rule_file_names(db, task.user_id, source_config.line_name, session_payload)
     macro_file_names = _collect_macro_file_names(session_payload)
+
+    if not rule_file_names:
+        raise ValueError("No rule files resolved for copy action")
 
     copied_rule_count = 0
     copied_macro_count = 0
@@ -165,6 +169,7 @@ def _collect_rule_file_names(
     selected_rule_targets = session_payload.get("selected_rule_targets", [])
     rule_files: list[str] = []
     seen: set[str] = set()
+    missing_items: list[str] = []
 
     for item in selected_rule_targets:
         rule_name = item.get("rule_name")
@@ -177,21 +182,32 @@ def _collect_rule_file_names(
                 continue
 
             file_name = _find_catalog_file_name(catalog_cache, rule_name, version)
-            if not file_name or file_name in seen:
+            if not file_name:
+                missing_items.append(f"{rule_name}:{version}")
+                continue
+
+            if file_name in seen:
                 continue
 
             seen.add(file_name)
             rule_files.append(file_name)
 
+    if missing_items:
+        raise ValueError(
+            "Rule file not found in session cache for: " + ", ".join(sorted(missing_items))
+        )
+
     return rule_files
 
 
 def _collect_macro_file_names(session_payload: dict[str, Any]) -> list[str]:
-    macro_review = session_payload.get("macro_review", {})
-    macro_items = [
-        *macro_review.get("old_macros", []),
-        *macro_review.get("new_macros", []),
-    ]
+    macro_items = session_payload.get("selected_macros", [])
+    if not macro_items and "selected_macros" not in session_payload:
+        macro_review = session_payload.get("macro_review", {})
+        macro_items = [
+            *macro_review.get("old_macros", []),
+            *macro_review.get("new_macros", []),
+        ]
 
     seen: set[str] = set()
     result: list[str] = []
@@ -233,45 +249,30 @@ def _copy_files_between_hosts(
     if not file_names:
         return 0
 
-    paramiko = _require_paramiko()
-    source_client = _open_ssh_client(paramiko, source_host)
-    target_client = _open_ssh_client(paramiko, target_host)
+    _assert_cp_supported_between_hosts(source_host, target_host)
+    _assert_remote_directory_exists(source_host, source_dir, "source")
+    _assert_remote_directory_exists(source_host, target_dir, "target")
 
-    try:
-        source_sftp = source_client.open_sftp()
-        target_sftp = target_client.open_sftp()
-        try:
-            _ensure_remote_dir(target_sftp, target_dir)
+    copied_count = 0
+    for file_name in file_names:
+        source_path = posixpath.join(source_dir, file_name)
+        target_path = posixpath.join(target_dir, posixpath.basename(file_name))
+        _copy_remote_file_with_cp(source_host, source_path, target_path)
+        copied_count += 1
 
-            copied_count = 0
-            for file_name in file_names:
-                source_path = posixpath.join(source_dir, file_name)
-                target_path = posixpath.join(target_dir, posixpath.basename(file_name))
-                _copy_remote_file(source_sftp, target_sftp, source_path, target_path)
-                copied_count += 1
-            return copied_count
-        finally:
-            source_sftp.close()
-            target_sftp.close()
-    finally:
-        source_client.close()
-        target_client.close()
+    return copied_count
 
 
 def _run_remote_command(host: HostConfig, working_dir: str, command: str, timeout: int = 120) -> str:
-    paramiko = _require_paramiko()
-    client = _open_ssh_client(paramiko, host)
-
     remote_command = _build_clean_bash_command(f"cd {shlex.quote(working_dir)} && {command}")
     try:
-        _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
-        exit_status = stdout.channel.recv_exit_status()
-        output = stdout.read().decode("utf-8", errors="ignore").strip()
-        error_output = stderr.read().decode("utf-8", errors="ignore").strip()
+        with open_limited_ssh_client(host) as client:
+            _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
+            exit_status = stdout.channel.recv_exit_status()
+            output = stdout.read().decode("utf-8", errors="ignore").strip()
+            error_output = stderr.read().decode("utf-8", errors="ignore").strip()
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(f"Remote command failed on host={host.name}: {exc}") from exc
-    finally:
-        client.close()
 
     if exit_status != 0:
         raise RuntimeError(error_output or f"Remote command failed with exit status {exit_status}")
@@ -279,63 +280,48 @@ def _run_remote_command(host: HostConfig, working_dir: str, command: str, timeou
     return output
 
 
-def _require_paramiko():
+def _run_remote_shell_command(host: HostConfig, command: str, timeout: int = 120) -> str:
+    remote_command = _build_clean_bash_command(command)
     try:
-        import paramiko
-    except ModuleNotFoundError as exc:
-        raise RuntimeError("paramiko is not installed") from exc
-    return paramiko
-
-
-def _open_ssh_client(paramiko, host: HostConfig):
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    try:
-        client.connect(
-            hostname=host.ip,
-            username=host.login_user,
-            password=host.login_password,
-            timeout=5,
-            auth_timeout=5,
-            banner_timeout=5,
-        )
+        with open_limited_ssh_client(host) as client:
+            _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
+            exit_status = stdout.channel.recv_exit_status()
+            output = stdout.read().decode("utf-8", errors="ignore").strip()
+            error_output = stderr.read().decode("utf-8", errors="ignore").strip()
     except Exception as exc:  # noqa: BLE001
-        client.close()
-        raise RuntimeError(f"SSH connection failed for host={host.name}: {exc}") from exc
-    return client
+        raise RuntimeError(f"Remote command failed on host={host.name}: {exc}") from exc
+
+    if exit_status != 0:
+        raise RuntimeError(error_output or f"Remote command failed with exit status {exit_status}")
+
+    return output
 
 
-def _ensure_remote_dir(sftp, directory: str) -> None:
+def _assert_cp_supported_between_hosts(source_host: HostConfig, target_host: HostConfig) -> None:
+    if source_host.name != target_host.name:
+        raise RuntimeError(
+            "cp-based copy requires source and target to be accessible from the same host"
+        )
+
+
+def _assert_remote_directory_exists(host: HostConfig, directory: str, label: str) -> None:
     normalized = posixpath.normpath(directory)
-    current = "/" if normalized.startswith("/") else ""
-    for part in normalized.split("/"):
-        if not part:
-            continue
-        current = posixpath.join(current, part) if current else part
-        try:
-            sftp.stat(current)
-        except FileNotFoundError:
-            sftp.mkdir(current)
+    _run_remote_shell_command(
+        host,
+        f"test -d {shlex.quote(normalized)}",
+    )
 
 
-def _copy_remote_file(source_sftp, target_sftp, source_path: str, target_path: str) -> None:
-    try:
-        with source_sftp.file(source_path, "rb") as source_file:
-            content = source_file.read()
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"Source file not found: {source_path}") from exc
-    except OSError as exc:
-        raise RuntimeError(f"Failed to read source file: {source_path}") from exc
-
-    parent_dir = posixpath.dirname(target_path)
-    if parent_dir:
-        _ensure_remote_dir(target_sftp, parent_dir)
-
-    try:
-        with target_sftp.file(target_path, "wb") as target_file:
-            target_file.write(content)
-    except OSError as exc:
-        raise RuntimeError(f"Failed to write target file: {target_path}") from exc
+def _copy_remote_file_with_cp(host: HostConfig, source_path: str, target_path: str) -> None:
+    source_normalized = posixpath.normpath(source_path)
+    target_normalized = posixpath.normpath(target_path)
+    command = " && ".join(
+        [
+            f"test -f {shlex.quote(source_normalized)}",
+            f"cp -f -- {shlex.quote(source_normalized)} {shlex.quote(target_normalized)}",
+        ]
+    )
+    _run_remote_shell_command(host, command)
 
 
 def _build_clean_bash_command(command: str) -> str:
