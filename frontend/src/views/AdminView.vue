@@ -16,6 +16,8 @@ const ezdfsSortOrder = ref('asc')
 
 const users = ref([])
 const hosts = ref([])
+const hostSshLimits = ref({})
+const hostSshProbeLoading = reactive({})
 const rtdConfigs = ref([])
 const ezdfsConfigs = ref([])
 const userDrafts = reactive({})
@@ -100,6 +102,17 @@ function syncHostDrafts() {
       },
     }
   }
+}
+
+function hostSshLimitInfo(hostName) {
+  return hostSshLimits.value[hostName] || null
+}
+
+function hostSshLimitLabel(hostName) {
+  const info = hostSshLimitInfo(hostName)
+  if (!info) return '-'
+  if (info.source === 'unknown') return '-'
+  return info.source === 'default' ? `${info.parallel_limit} (default)` : String(info.parallel_limit)
 }
 
 function syncRtdDrafts() {
@@ -256,12 +269,30 @@ function sortState(activeKey, activeOrder, key) {
 async function loadAll() {
   users.value = (await apiGet('/api/admin/users')).items
   hosts.value = (await apiGet('/api/admin/hosts')).items
+  hostSshLimits.value = Object.fromEntries(
+    ((await apiGet('/api/admin/hosts/ssh-limits')).items || []).map((item) => [item.host_name, item]),
+  )
   rtdConfigs.value = (await apiGet('/api/admin/rtd/configs')).items
   ezdfsConfigs.value = (await apiGet('/api/admin/ezdfs/configs')).items
   syncUserDrafts()
   syncHostDrafts()
   syncRtdDrafts()
   syncEzdfsDrafts()
+}
+
+async function probeHostSshLimit(hostName) {
+  if (hostSshProbeLoading[hostName]) return
+  hostSshProbeLoading[hostName] = true
+  try {
+    const result = await apiPost(`/api/admin/hosts/${hostName}/ssh-limits/probe`, {})
+    hostSshLimits.value = {
+      ...hostSshLimits.value,
+      [hostName]: result.item,
+    }
+    uiStore.setNotice(`${hostName} SSH Limit 감지가 완료되었습니다.`)
+  } finally {
+    hostSshProbeLoading[hostName] = false
+  }
 }
 
 onMounted(loadAll)
@@ -567,6 +598,7 @@ async function deleteEzdfs(moduleName) {
                     </div>
                   </th>
                   <th>Password</th>
+                  <th>SSH Limit</th>
                   <th class="sortable-header" @click="toggleHostSort('modifier')">
                     <div class="sortable-header-inner">
                       <span>Modifier</span>
@@ -603,6 +635,28 @@ async function deleteEzdfs(moduleName) {
                     />
                     <span v-else>******</span>
                   </td>
+                  <td>
+                    <div class="inline-edit-cell">
+                      <span
+                        class="ellipsis-cell"
+                        :title="hostSshLimitInfo(host.name)?.source === 'default'
+                          ? 'remote 감지 실패로 기본값 10 사용'
+                          : hostSshLimitInfo(host.name)?.source === 'remote'
+                            ? 'remote sshd 설정 기준 감지값'
+                            : '아직 감지되지 않음'"
+                      >
+                        {{ hostSshLimitLabel(host.name) }}
+                      </span>
+                      <button
+                        class="edit-icon-button"
+                        type="button"
+                        :disabled="hostSshProbeLoading[host.name]"
+                        @click="probeHostSshLimit(host.name)"
+                      >
+                        {{ hostSshProbeLoading[host.name] ? '...' : '감지' }}
+                      </button>
+                    </div>
+                  </td>
                   <td class="modifier-cell">
                     <span class="modifier-text ellipsis-cell" :title="host.modifier">{{ host.modifier }}</span>
                   </td>
@@ -635,7 +689,7 @@ async function deleteEzdfs(moduleName) {
                   </td>
                 </tr>
                 <tr v-if="!sortedHosts.length">
-                  <td colspan="6" class="muted">표시할 Host 설정이 없습니다.</td>
+                  <td colspan="7" class="muted">표시할 Host 설정이 없습니다.</td>
                 </tr>
               </tbody>
             </table>
