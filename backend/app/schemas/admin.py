@@ -49,6 +49,12 @@ class HostConfigResponse(HostConfigCreate):
     updated_at: datetime
 
 
+class HostSshLimitResponse(BaseModel):
+    host_name: str
+    parallel_limit: int
+    source: str
+
+
 class RtdConfigCreate(BaseModel):
     line_name: str
     line_id: str

@@ -1,14 +1,16 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { apiGet, apiPost, apiPut, downloadFile } from '../api'
+import { apiDelete, apiGet, apiPost, apiPut, downloadFile } from '../api'
 
 export const useRtdStore = defineStore('rtd', () => {
   const currentStep = ref(1)
   const selectedBusinessUnit = ref('')
   const selectedLineName = ref('')
   const selectedRuleTargets = ref([])
+  const selectedMacros = ref([])
   const macroReview = ref({
+    searched: false,
     old_macros: [],
     new_macros: [],
     has_diff: false,
@@ -28,13 +30,17 @@ export const useRtdStore = defineStore('rtd', () => {
     [...new Set(selectedRuleTargets.value.map((item) => item.rule_name).filter(Boolean))]
   )
 
+  function normalizeTargetLineName(lineName) {
+    return String(lineName || '').replace(/_TARGET\b/gi, '')
+  }
+
   const sessionPayload = computed(() => ({
     current_step: currentStep.value,
     selected_business_unit: selectedBusinessUnit.value,
     selected_line_name: selectedLineName.value,
     selected_rules: selectedRules.value,
     selected_rule_targets: selectedRuleTargets.value,
-    selected_macros: [],
+    selected_macros: selectedMacros.value,
     selected_versions: {},
     macro_review: macroReview.value,
     target_lines: targetLines.value,
@@ -88,25 +94,50 @@ export const useRtdStore = defineStore('rtd', () => {
 
   async function loadMacroReview() {
     if (!selectedLineName.value || !selectedRuleTargets.value.length) {
+      selectedMacros.value = []
       macroReview.value = {
+        searched: false,
         old_macros: [],
         new_macros: [],
         has_diff: false,
         error: '',
       }
-      return
+      return false
     }
 
-    const result = await apiPost('/api/rtd/macros/compare', {
-      line_name: selectedLineName.value,
-      selected_rule_targets: selectedRuleTargets.value,
-    })
+    try {
+      const result = await apiPost('/api/rtd/macros/compare', {
+        line_name: selectedLineName.value,
+        selected_rule_targets: selectedRuleTargets.value,
+      })
 
-    macroReview.value = {
-      old_macros: result.old_macros || [],
-      new_macros: result.new_macros || [],
-      has_diff: Boolean(result.has_diff),
-      error: result.error || '',
+      const allMacros = [...new Set([...(result.old_macros || []), ...(result.new_macros || [])])]
+      selectedMacros.value = allMacros
+
+      macroReview.value = {
+        searched: true,
+        old_macros: result.old_macros || [],
+        new_macros: result.new_macros || [],
+        has_diff: Boolean(result.has_diff),
+        error: result.error || '',
+      }
+      return true
+    } catch (error) {
+      selectedMacros.value = []
+      const detail =
+        error?.response?.data?.error?.message ||
+        error?.response?.data?.detail ||
+        error?.message ||
+        'Macro 조회에 실패했습니다.'
+
+      macroReview.value = {
+        searched: true,
+        old_macros: [],
+        new_macros: [],
+        has_diff: false,
+        error: typeof detail === 'string' ? detail : 'Macro 조회에 실패했습니다.',
+      }
+      return false
     }
   }
 
@@ -126,7 +157,9 @@ export const useRtdStore = defineStore('rtd', () => {
         new_version: '',
         old_version: '',
       }))
+    selectedMacros.value = Array.isArray(session.selected_macros) ? session.selected_macros : []
     macroReview.value = {
+      searched: Boolean(session.macro_review?.searched),
       old_macros: session.macro_review?.old_macros || [],
       new_macros: session.macro_review?.new_macros || [],
       has_diff: Boolean(session.macro_review?.has_diff),
@@ -136,7 +169,6 @@ export const useRtdStore = defineStore('rtd', () => {
 
     if (selectedBusinessUnit.value) await loadLines()
     if (selectedLineName.value) await loadRules()
-    if (selectedRuleTargets.value.length) await loadMacroReview()
     await refreshTasks()
     await refreshMonitor()
   }
@@ -144,7 +176,8 @@ export const useRtdStore = defineStore('rtd', () => {
   function resetAfterBusinessUnit() {
     selectedLineName.value = ''
     selectedRuleTargets.value = []
-    macroReview.value = { old_macros: [], new_macros: [], has_diff: false, error: '' }
+    selectedMacros.value = []
+    macroReview.value = { searched: false, old_macros: [], new_macros: [], has_diff: false, error: '' }
     targetLines.value = []
     lines.value = []
     rules.value = []
@@ -154,14 +187,24 @@ export const useRtdStore = defineStore('rtd', () => {
 
   function resetAfterLine() {
     selectedRuleTargets.value = []
-    macroReview.value = { old_macros: [], new_macros: [], has_diff: false, error: '' }
+    selectedMacros.value = []
+    macroReview.value = { searched: false, old_macros: [], new_macros: [], has_diff: false, error: '' }
     targetLines.value = []
     rules.value = []
     ruleVersions.value = []
   }
 
   async function executeAction(action, overrideTargetLines = null) {
-    const lines = overrideTargetLines || targetLines.value
+    let lines = overrideTargetLines || targetLines.value
+    if (action === 'copy') {
+      lines = lines.filter((line) => normalizeTargetLineName(line) !== selectedLineName.value)
+    }
+
+    if (!lines.length) {
+      tasks.value = []
+      return []
+    }
+
     const data = await apiPost(`/api/rtd/actions/${action}`, {
       target_lines: lines,
       payload: sessionPayload.value,
@@ -173,6 +216,7 @@ export const useRtdStore = defineStore('rtd', () => {
       }
     }
     await saveSession()
+    return data.items
   }
 
   async function refreshTasks() {
@@ -238,11 +282,40 @@ export const useRtdStore = defineStore('rtd', () => {
     })
   }
 
+  async function resetFlow() {
+    try {
+      await apiDelete('/api/rtd/session')
+    } catch {
+      // Keep local reset even if server session deletion fails.
+    }
+
+    currentStep.value = 1
+    selectedBusinessUnit.value = ''
+    selectedLineName.value = ''
+    selectedRuleTargets.value = []
+    selectedMacros.value = []
+    macroReview.value = {
+      searched: false,
+      old_macros: [],
+      new_macros: [],
+      has_diff: false,
+      error: '',
+    }
+    targetLines.value = []
+    monitorItems.value = []
+    copyVisibilityMap.value = {}
+    lines.value = []
+    rules.value = []
+    ruleVersions.value = []
+    targetLineOptions.value = []
+  }
+
   return {
     currentStep,
     selectedBusinessUnit,
     selectedLineName,
     selectedRules,
+    selectedMacros,
     macroReview,
     targetLines,
     selectedRuleTargets,
@@ -269,5 +342,6 @@ export const useRtdStore = defineStore('rtd', () => {
     downloadRaw,
     downloadSummary,
     downloadAggregateSummary,
+    resetFlow,
   }
 })

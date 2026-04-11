@@ -218,6 +218,11 @@ button {
   gap: 12px;
 }
 
+.wizard-actions-spacer {
+  min-width: 88px;
+  height: 1px;
+}
+
 .tab-row {
   flex-wrap: wrap;
   margin-bottom: 20px;
@@ -768,10 +773,88 @@ select:focus {
   gap: 14px;
 }
 
+.manager-section-title-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.manager-inline-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: -4px;
+}
+
+.manager-inline-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 13px;
+  white-space: nowrap;
+}
+
+.manager-inline-spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
 .macro-review-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.macro-card-head-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.macro-card-head-copy h4 {
+  margin: 0;
+}
+
+.macro-card-action {
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.macro-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.macro-select-item {
+  align-items: center;
+}
+
+.macro-select-label {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.macro-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.macro-check input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .rule-builder-card {

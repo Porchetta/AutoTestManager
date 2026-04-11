@@ -12,6 +12,7 @@ const {
   selectedBusinessUnit,
   selectedLineName,
   selectedRuleTargets,
+  selectedMacros,
   macroReview,
   targetLines,
   monitorItems,
@@ -34,9 +35,15 @@ const steps = [
 const ruleCandidate = ref("");
 const ruleCandidateNewVersion = ref("");
 const ruleCandidateOldVersion = ref("");
+const macroSearchLoading = ref(false);
+const resetFlowLoading = ref(false);
 
 function displayTargetLineName(targetLine) {
   return String(targetLine || "").replace(/_TARGET\b/gi, "");
+}
+
+function isDevLineTarget(targetLine) {
+  return displayTargetLineName(targetLine) === selectedLineName.value;
 }
 
 function monitorStatusChip(item) {
@@ -112,9 +119,11 @@ const selectionStats = computed(() => [
   },
   {
     label: "Macro",
-    value: macroReview.value.error
+    value: !macroReview.value.searched
+      ? "미탐색"
+      : macroReview.value.error
       ? "오류"
-      : `${macroReview.value.old_macros.length + macroReview.value.new_macros.length}개`,
+      : `${selectedMacros.value.length}개`,
   },
   {
     label: "타겟 라인",
@@ -197,8 +206,15 @@ async function addRuleTarget() {
     new_version: ruleCandidateNewVersion.value,
     old_version: ruleCandidateOldVersion.value,
   });
+  selectedMacros.value = [];
+  macroReview.value = {
+    searched: false,
+    old_macros: [],
+    new_macros: [],
+    has_diff: false,
+    error: "",
+  };
   targetLines.value = [];
-  await rtdStore.loadMacroReview();
   await rtdStore.saveSession();
 
   ruleCandidateNewVersion.value = "";
@@ -210,8 +226,78 @@ async function addRuleTarget() {
 
 async function removeRuleTarget(index) {
   selectedRuleTargets.value.splice(index, 1);
+  selectedMacros.value = [];
+  macroReview.value = {
+    searched: false,
+    old_macros: [],
+    new_macros: [],
+    has_diff: false,
+    error: "",
+  };
   targetLines.value = [];
-  await rtdStore.loadMacroReview();
+  await rtdStore.saveSession();
+}
+
+async function searchMacros() {
+  if (macroSearchLoading.value) {
+    return;
+  }
+  if (!selectedLineName.value || !selectedRuleTargets.value.length) {
+    uiStore.setError("먼저 테스트 대상 Rule을 추가해주세요.");
+    return;
+  }
+
+  macroSearchLoading.value = true;
+  try {
+    const success = await rtdStore.loadMacroReview();
+    await rtdStore.saveSession();
+
+    if (!success || macroReview.value.error) {
+      return;
+    }
+
+    if (macroReview.value.has_diff) {
+      uiStore.setNotice("Macro 탐색이 완료되었습니다.");
+      return;
+    }
+
+    uiStore.setNotice("Macro 탐색이 완료되었습니다. 차이가 없습니다.");
+  } finally {
+    macroSearchLoading.value = false;
+  }
+}
+
+function isMacroSelected(macroName) {
+  return selectedMacros.value.includes(macroName);
+}
+
+async function toggleMacroSelection(macroName, checked) {
+  if (!macroName) return;
+
+  if (checked) {
+    if (!selectedMacros.value.includes(macroName)) {
+      selectedMacros.value = [...selectedMacros.value, macroName];
+    }
+  } else {
+    selectedMacros.value = selectedMacros.value.filter((item) => item !== macroName);
+  }
+
+  await rtdStore.saveSession();
+}
+
+async function selectAllMacros(macroType) {
+  const sourceItems =
+    macroType === "old" ? macroReview.value.old_macros : macroReview.value.new_macros;
+  const merged = [...new Set([...selectedMacros.value, ...sourceItems])];
+  selectedMacros.value = merged;
+  await rtdStore.saveSession();
+}
+
+async function clearAllMacros(macroType) {
+  const sourceItems =
+    macroType === "old" ? macroReview.value.old_macros : macroReview.value.new_macros;
+  const sourceSet = new Set(sourceItems);
+  selectedMacros.value = selectedMacros.value.filter((item) => !sourceSet.has(item));
   await rtdStore.saveSession();
 }
 
@@ -249,7 +335,11 @@ async function run(action) {
     uiStore.setError("타겟 라인을 먼저 선택해주세요.");
     return;
   }
-  await rtdStore.executeAction(action);
+  const items = await rtdStore.executeAction(action);
+  if (action === "copy" && !items.length) {
+    uiStore.setNotice("개발 라인은 복사 대상에서 제외되었습니다.");
+    return;
+  }
   await rtdStore.refreshMonitor();
   uiStore.setNotice(`${action.toUpperCase()} 요청이 등록되었습니다.`);
 }
@@ -269,17 +359,48 @@ async function selectAllTargets() {
   await rtdStore.refreshMonitor();
 }
 
+async function clearAllTargets() {
+  targetLines.value = [];
+  await rtdStore.saveSession();
+  await rtdStore.refreshMonitor();
+}
+
 async function updateTargetSelection() {
   await rtdStore.saveSession();
   await rtdStore.refreshMonitor();
 }
 
 async function runSingleAction(action, targetName) {
-  await rtdStore.executeAction(action, [targetName]);
+  if (action === "copy" && isDevLineTarget(targetName)) {
+    uiStore.setNotice("개발 라인은 복사 대상에서 제외됩니다.");
+    return;
+  }
+  const items = await rtdStore.executeAction(action, [targetName]);
+  if (action === "copy" && !items.length) {
+    uiStore.setNotice("개발 라인은 복사 대상에서 제외되었습니다.");
+    return;
+  }
   await rtdStore.refreshMonitor();
   uiStore.setNotice(
     `${displayTargetLineName(targetName)} ${action.toUpperCase()} 요청이 등록되었습니다.`,
   );
+}
+
+async function resetFlow() {
+  if (resetFlowLoading.value) {
+    return;
+  }
+
+  resetFlowLoading.value = true;
+  try {
+    await rtdStore.resetFlow();
+    ruleCandidate.value = "";
+    ruleCandidateNewVersion.value = "";
+    ruleCandidateOldVersion.value = "";
+    uiStore.setNotice("RTD 진행 상태가 초기화되었습니다.");
+  } finally {
+    resetFlowLoading.value = false;
+  }
 }
 </script>
 
@@ -465,25 +586,69 @@ async function runSingleAction(action, targetName) {
                 <h4>Macro 확인</h4>
               </div>
             </div>
-            <div v-if="macroReview.error" class="stack-item">
+            <div class="manager-inline-actions">
+              <button
+                class="button button-primary manager-inline-action"
+                :disabled="macroSearchLoading || !selectedRuleTargets.length"
+                @click="searchMacros"
+              >
+                <span
+                  v-if="macroSearchLoading"
+                  class="monitor-action-spinner manager-inline-spinner"
+                ></span>
+                <span>{{ macroSearchLoading ? "탐색중" : "탐색" }}</span>
+              </button>
+            </div>
+            <div v-if="!macroReview.searched" class="stack-item">
+              <strong>Macro 미탐색</strong>
+              <p class="muted">
+                탐색 버튼을 눌러 선택된 Rule 기준으로 Macro 차이를 확인하세요.
+              </p>
+            </div>
+            <div v-else-if="macroReview.error" class="stack-item">
               <strong>Macro 조회 실패</strong>
               <p class="muted">{{ macroReview.error }}</p>
             </div>
             <div v-else class="macro-review-grid">
               <div class="panel-subcard">
                 <div class="panel-head">
-                  <h4>Old Macro</h4>
-                  <span class="pill pill-ghost">{{
-                    macroReview.old_macros.length
-                  }}</span>
+                  <div class="macro-card-head-copy">
+                    <h4>Old Macro</h4>
+                    <span class="pill pill-ghost">{{
+                      macroReview.old_macros.length
+                    }}</span>
+                  </div>
+                  <div class="macro-card-actions">
+                    <button
+                      class="button button-ghost macro-card-action"
+                      :disabled="!macroReview.old_macros.length"
+                      @click="selectAllMacros('old')"
+                    >
+                      전체선택
+                    </button>
+                    <button
+                      class="button button-ghost macro-card-action"
+                      :disabled="!macroReview.old_macros.length"
+                      @click="clearAllMacros('old')"
+                    >
+                      전체 해제
+                    </button>
+                  </div>
                 </div>
                 <div class="stack-list" v-if="macroReview.old_macros.length">
                   <div
                     v-for="item in macroReview.old_macros"
                     :key="`old-${item}`"
-                    class="stack-item"
+                    class="stack-item macro-select-item"
                   >
-                    {{ item }}
+                    <span class="macro-select-label">{{ item }}</span>
+                    <label class="macro-check">
+                      <input
+                        :checked="isMacroSelected(item)"
+                        type="checkbox"
+                        @change="toggleMacroSelection(item, $event.target.checked)"
+                      />
+                    </label>
                   </div>
                 </div>
                 <p v-else class="muted">차이가 있는 Old Macro가 없습니다.</p>
@@ -491,23 +656,51 @@ async function runSingleAction(action, targetName) {
 
               <div class="panel-subcard">
                 <div class="panel-head">
-                  <h4>New Macro</h4>
-                  <span class="pill pill-ghost">{{
-                    macroReview.new_macros.length
-                  }}</span>
+                  <div class="macro-card-head-copy">
+                    <h4>New Macro</h4>
+                    <span class="pill pill-ghost">{{
+                      macroReview.new_macros.length
+                    }}</span>
+                  </div>
+                  <div class="macro-card-actions">
+                    <button
+                      class="button button-ghost macro-card-action"
+                      :disabled="!macroReview.new_macros.length"
+                      @click="selectAllMacros('new')"
+                    >
+                      전체선택
+                    </button>
+                    <button
+                      class="button button-ghost macro-card-action"
+                      :disabled="!macroReview.new_macros.length"
+                      @click="clearAllMacros('new')"
+                    >
+                      전체 해제
+                    </button>
+                  </div>
                 </div>
                 <div class="stack-list" v-if="macroReview.new_macros.length">
                   <div
                     v-for="item in macroReview.new_macros"
                     :key="`new-${item}`"
-                    class="stack-item"
+                    class="stack-item macro-select-item"
                   >
-                    {{ item }}
+                    <span class="macro-select-label">{{ item }}</span>
+                    <label class="macro-check">
+                      <input
+                        :checked="isMacroSelected(item)"
+                        type="checkbox"
+                        @change="toggleMacroSelection(item, $event.target.checked)"
+                      />
+                    </label>
                   </div>
                 </div>
                 <p v-else class="muted">차이가 있는 New Macro가 없습니다.</p>
               </div>
             </div>
+            <p v-if="macroReview.searched && !macroReview.error" class="muted">
+              선택된 Macro만 복사 대상에 포함됩니다.
+            </p>
           </div>
 
           <div v-else-if="currentStep === 5" class="wizard-block">
@@ -516,9 +709,14 @@ async function runSingleAction(action, targetName) {
                 <p class="eyebrow">Step 5</p>
                 <h4>타겟 라인 선택</h4>
               </div>
-              <button class="button button-ghost" @click="selectAllTargets">
-                전체 선택
-              </button>
+              <div class="macro-card-actions">
+                <button class="button button-ghost" @click="selectAllTargets">
+                  전체 선택
+                </button>
+                <button class="button button-ghost" @click="clearAllTargets">
+                  전체 해제
+                </button>
+              </div>
             </div>
             <div class="check-grid">
               <label
@@ -566,16 +764,17 @@ async function runSingleAction(action, targetName) {
           </div>
 
           <div class="wizard-actions">
+            <span v-if="currentStep === 1" class="wizard-actions-spacer" aria-hidden="true" />
             <button
+              v-if="currentStep > 1"
               class="button button-ghost"
-              :disabled="currentStep === 1"
               @click="previousStep"
             >
               이전
             </button>
             <button
+              v-if="currentStep < 6"
               class="button button-primary"
-              :disabled="currentStep === 6"
               @click="nextStep"
             >
               다음
@@ -588,8 +787,17 @@ async function runSingleAction(action, targetName) {
     <article class="panel panel-span-2">
       <div class="panel-head">
         <h3>Target Status Monitor</h3>
-        <button class="button button-ghost" @click="rtdStore.refreshMonitor()">
-          새로고침
+        <button
+          class="button button-ghost manager-inline-action"
+          type="button"
+          :disabled="resetFlowLoading"
+          @click="resetFlow"
+        >
+          <span
+            v-if="resetFlowLoading"
+            class="monitor-action-spinner manager-inline-spinner"
+          ></span>
+          <span>{{ resetFlowLoading ? "초기화중" : "초기화" }}</span>
         </button>
       </div>
       <div class="task-grid">
@@ -608,13 +816,18 @@ async function runSingleAction(action, targetName) {
           </div>
 
           <div class="monitor-action-grid">
-            <button
-              class="monitor-action-button"
-              :class="monitorActionClass(item.copy.status)"
-              :title="monitorFailureReason(item.copy)"
-              type="button"
-              @click="runSingleAction('copy', item.target_name)"
-            >
+                <button
+                  class="monitor-action-button"
+                  :class="monitorActionClass(item.copy.status)"
+                  :title="
+                    isDevLineTarget(item.target_name)
+                      ? '개발 라인은 복사 대상이 아닙니다.'
+                      : monitorFailureReason(item.copy)
+                  "
+                  type="button"
+                  :disabled="isDevLineTarget(item.target_name)"
+                  @click="runSingleAction('copy', item.target_name)"
+                >
               <strong>복사</strong>
               <span class="monitor-action-meta">
                 <span class="monitor-action-text">{{

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class RtdMacroReviewPayload(BaseModel):
+    searched: bool = False
     old_macros: list[str] = Field(default_factory=list)
     new_macros: list[str] = Field(default_factory=list)
     has_diff: bool = False
