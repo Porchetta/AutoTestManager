@@ -12,6 +12,7 @@ from app.schemas.admin import (
     EzdfsConfigUpdate,
     HostConfigCreate,
     HostConfigResponse,
+    HostSshLimitResponse,
     HostConfigUpdate,
     RoleUpdateRequest,
     UserUpdateRequest,
@@ -20,6 +21,7 @@ from app.schemas.admin import (
     RtdConfigUpdate,
     UserResponse,
 )
+from app.services.ssh_runtime import get_host_parallel_limit_info, probe_host_parallel_limit_info
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -125,6 +127,16 @@ def list_hosts(
     return success_response({"items": [HostConfigResponse.model_validate(item).model_dump() for item in items]})
 
 
+@router.get("/hosts/ssh-limits")
+def list_host_ssh_limits(
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    items = db.query(HostConfig).order_by(HostConfig.name.asc()).all()
+    response_items = [HostSshLimitResponse(**get_host_parallel_limit_info(item)).model_dump() for item in items]
+    return success_response({"items": response_items})
+
+
 @router.post("/hosts", status_code=status.HTTP_201_CREATED)
 def create_host(
     payload: HostConfigCreate,
@@ -139,6 +151,7 @@ def create_host(
     db.add(host)
     db.commit()
     db.refresh(host)
+    probe_host_parallel_limit_info(host)
     return success_response({"host": HostConfigResponse.model_validate(host).model_dump()})
 
 
@@ -168,7 +181,22 @@ def update_host(
     db.add(host)
     db.commit()
     db.refresh(host)
+    probe_host_parallel_limit_info(host)
     return success_response({"host": HostConfigResponse.model_validate(host).model_dump()})
+
+
+@router.post("/hosts/{name}/ssh-limits/probe")
+def probe_host_ssh_limit(
+    name: str,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    host = db.query(HostConfig).filter(HostConfig.name == name).first()
+    if host is None:
+        raise HTTPException(status_code=404, detail="Host not found")
+
+    item = HostSshLimitResponse(**probe_host_parallel_limit_info(host)).model_dump()
+    return success_response({"item": item})
 
 
 @router.delete("/hosts/{name}", status_code=status.HTTP_204_NO_CONTENT)
