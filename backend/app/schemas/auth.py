@@ -18,7 +18,7 @@ class LoginRequest(BaseModel):
 
 
 class PasswordChangeRequest(BaseModel):
-    current_password: str
+    current_password: str | None = None
     new_password: str = Field(min_length=4, max_length=100)
 
 
@@ -32,4 +32,3 @@ class UserResponse(BaseModel):
     is_approved: bool
     created_at: datetime
     updated_at: datetime
-

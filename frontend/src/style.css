@@ -892,6 +892,12 @@ select option {
   font-size: 0.86rem;
 }
 
+.mypage-account-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
 /* ---------- RTD Manager ---------- */
 .manager-banner {
   display: grid;
@@ -1993,6 +1999,14 @@ select option {
   font-size: 1.35rem;
 }
 
+.password-modal {
+  width: min(100%, 460px);
+}
+
+.password-modal-form {
+  margin-top: 18px;
+}
+
 .confirm-copy {
   margin: 0;
   color: var(--muted-strong);
@@ -2183,6 +2197,7 @@ select option {
   }
 
   .manager-inline-stats,
+  .mypage-account-stats,
   .manager-step-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2250,6 +2265,7 @@ select option {
   }
 
   .manager-inline-stats,
+  .mypage-account-stats,
   .manager-step-strip,
   .rule-builder-row,
   .rule-toolbar-row,
