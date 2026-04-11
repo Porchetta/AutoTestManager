@@ -652,6 +652,7 @@ Rule / Version 파싱 정책:
   - 최근 `테스트`
   - RawData 다운로드 가능 여부
 - `복사` 상태는 현재 페이지 수명 동안만 보이는 프론트 정책이 적용될 수 있다
+- RawData 다운로드 가능 여부는 "현재 로그인 사용자의 가장 최근 `TEST/RETEST` task가 raw 파일을 가진 경우"에만 true가 된다
 - 현재 상태 텍스트는 프론트에서 아래 형태의 chip으로 표시할 수 있다
   - `Copying [이름]`
   - `Compiling [이름]`
@@ -672,6 +673,8 @@ Rule / Version 파싱 정책:
 - `GET /aggregate-summary`: 선택된 타겟 라인의 최신 테스트 결과를 모아 집계 xlsx 생성 후 다운로드
 - 개별 raw / summary는 task 상태가 `DONE`일 때만 다운로드 허용
 - 집계 결과서는 현재 로그인 사용자 기준 최신 `TEST/RETEST` 결과만 포함한다
+- monitor의 RawData 다운로드 버튼도 현재 로그인 사용자 기준 최신 `TEST/RETEST` task를 기준으로 활성화한다
+- 더 오래된 성공 raw 파일이 있더라도, 최신 테스트 이력이 raw를 만들지 못했다면 다운로드를 열지 않는다
 - raw txt 다운로드 파일명은 실제 저장된 `{line_name}-{timestamp}.txt`를 그대로 사용한다
 - 집계 결과서 다운로드 파일명은 실제 저장된 `{business_unit}-{timestamp}.xlsx`를 그대로 사용한다
 
