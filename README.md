@@ -14,10 +14,11 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
 
 - RTD
   - Rule / Version 조회는 개발 라인 기준 SSH로 동작
-  - Macro 확인은 `.rule` 파일 내용을 읽어 비교
+  - Macro 확인은 사용자가 `탐색` 버튼을 눌렀을 때만 `.rule` / macro 파일을 읽어 비교
   - 복사 / 컴파일 / 테스트는 커스텀 가능한 실행 훅을 통해 수행
   - 타겟 라인별 상태 모니터와 Raw Data 다운로드 제공
   - 테스트 결과서 생성 시 선택된 라인의 최신 테스트 결과를 모아 `.xlsx`로 다운로드
+  - 개발 라인 자체는 복사 대상에서 제외
 - ezDFS
   - 현재는 mock 또는 단순 생성 로직 중심
   - test / retest / raw / summary 흐름은 유지하되, 추후 실제 외부 연동으로 교체 가능
@@ -50,6 +51,7 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
   - 사용자 삭제
 - Host Settings
   - Host 등록 / 수정 / 삭제
+  - SSH 병렬 제한값 감지 / 재감지
 - RTD Settings
   - 사업부 필터
   - RTD config 등록 / 수정 / 삭제
@@ -59,6 +61,7 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
 공통 정책:
 - 모든 삭제는 커스텀 확인 모달 사용
 - `modifier`는 로그인한 관리자 이름으로 자동 기록
+- Host의 SSH 병렬 제한 감지 실패 시 기본값 `10`을 사용하고 관리자 알람 로그에 남김
 
 ### RTD Test Manager
 - 6단계 Manager 구조
@@ -71,6 +74,9 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
 - Rule / Version catalog는 개발 서버 SSH 조회 기반
 - 선택한 Rule target 조합을 누적 관리
 - old/new `.rule` 파일 비교 후 Macro 차이 확인
+- Macro는 Step 4에서 수동 `탐색` 시에만 조회
+- 탐색된 Old / New Macro는 기본 전체선택 상태로 시작하며, 개별 체크 또는 `전체선택 / 전체 해제` 가능
+- 타겟 라인도 `전체 선택 / 전체 해제` 가능
 - 상단 실행 제어
   - `복사`
   - `컴파일`
@@ -80,6 +86,7 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
   - 라인별 상태 chip
   - 개별 `복사 / 컴파일 / 테스트`
   - `Raw Data` 다운로드
+- 실행 제어 패널에서는 `초기화`로 세션과 선택 상태를 모두 비우고 Step 1로 복귀 가능
 - 세션 저장 / 복원
 
 ### ezDFS Test
@@ -104,6 +111,7 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
   - 파일명 파싱으로 `rule_name`, `version` 생성
   - `.rule` 파일 텍스트 읽기
   - Rule 텍스트에서 Macro list 추출
+  - nested macro 재귀 탐색
 - `backend/app/services/rtd_execution_custom.py`
   - 복사
   - 컴파일
@@ -114,6 +122,7 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
 기본 구현은 다음을 전제로 합니다.
 - Rule 파일은 개발 라인 `home_dir_path`
 - Macro 파일은 개발 라인 기준 `../Macro`
+- 원격 명령은 `bash --noprofile --norc -lc ...` 형식으로 실행
 - compile 명령: `./atm_compiler {rule_name} {line_name}`
 - test 명령: `./atm_testscript {rule_name} {line_name}`
 
@@ -187,6 +196,7 @@ npm run dev
 정책:
 - DB에는 결과 본문이 아니라 파일 경로를 저장
 - 다운로드 파일명은 실제 저장된 파일명을 그대로 사용
+- SSH 병렬 제한 감지 실패 알람 로그: `backend/data/logs/admin_alert.log`
 
 ## 현재 구현 정책
 
@@ -204,4 +214,5 @@ npm run dev
 
 - 백엔드 시작 시 기본 관리자 seed와 legacy `modifier` 컬럼 보정이 수행될 수 있습니다.
 - Admin 설정의 `Host / RTD / ezDFS`는 모두 수정 가능하며, 수정 시 `modifier`가 자동 갱신됩니다.
+- Host Settings에서 `SSH Limit` 컬럼과 `감지` 버튼으로 현재 병렬 제한 캐시를 확인할 수 있습니다.
 - RTD 실행 제어와 결과서 생성 정책은 `docs/Back.md`를 우선 기준으로 봐주세요.
