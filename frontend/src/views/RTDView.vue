@@ -170,6 +170,13 @@ async function selectRuleCandidate() {
     return;
   }
   await rtdStore.loadRuleVersions(ruleCandidate.value);
+  const versions = rtdStore.ruleVersions;
+  if (versions.length >= 1) {
+    ruleCandidateNewVersion.value = versions[0];
+  }
+  if (versions.length >= 2) {
+    ruleCandidateOldVersion.value = versions[1];
+  }
 }
 
 async function addRuleTarget() {
@@ -458,7 +465,7 @@ async function resetFlow() {
                 <h4>사업부 선택</h4>
               </div>
             </div>
-            <div class="choice-grid">
+            <div class="choice-grid choice-grid-inline">
               <button
                 v-for="item in businessUnits"
                 :key="item"
@@ -481,7 +488,7 @@ async function resetFlow() {
                 <h4>개발 라인 선택</h4>
               </div>
             </div>
-            <div class="choice-grid">
+            <div class="choice-grid choice-grid-inline">
               <button
                 v-for="item in lines"
                 :key="item"
@@ -556,11 +563,13 @@ async function resetFlow() {
             <div class="manager-section-head manager-section-head-compact">
               <div>
                 <p class="eyebrow">Selection Tray</p>
-                <h4>추가된 테스트 대상 Rule</h4>
+                <div class="manager-section-title-inline">
+                  <h4>추가된 테스트 대상 Rule</h4>
+                  <span class="pill pill-ghost"
+                    >{{ selectedRuleTargets.length }} Items</span
+                  >
+                </div>
               </div>
-              <span class="pill pill-ghost"
-                >{{ selectedRuleTargets.length }} Items</span
-              >
             </div>
 
             <div
@@ -614,9 +623,6 @@ async function resetFlow() {
               class="stack-item macro-state-panel"
             >
               <strong>Macro 미탐색</strong>
-              <p class="muted">
-                탐색 버튼을 눌러 선택된 Rule 기준으로 Macro 차이를 확인하세요.
-              </p>
             </div>
             <div
               v-else-if="macroReview.error"
@@ -630,9 +636,9 @@ async function resetFlow() {
                 <div class="panel-head">
                   <div class="macro-card-head-copy">
                     <h4>Old Macro</h4>
-                    <span class="pill pill-ghost">{{
-                      macroReview.old_macros.length
-                    }}</span>
+                    <span class="pill pill-ghost"
+                      >{{ macroReview.old_macros.length }} Items</span
+                    >
                   </div>
                   <div class="macro-card-actions">
                     <button
@@ -679,9 +685,9 @@ async function resetFlow() {
                 <div class="panel-head">
                   <div class="macro-card-head-copy">
                     <h4>New Macro</h4>
-                    <span class="pill pill-ghost">{{
-                      macroReview.new_macros.length
-                    }}</span>
+                    <span class="pill pill-ghost"
+                      >{{ macroReview.new_macros.length }} Items</span
+                    >
                   </div>
                   <div class="macro-card-actions">
                     <button
@@ -733,18 +739,26 @@ async function resetFlow() {
             <div class="manager-section-head">
               <div>
                 <p class="eyebrow">Step 5</p>
-                <h4>타겟 라인 선택</h4>
-              </div>
-              <div class="macro-card-actions">
-                <button class="button button-ghost" @click="selectAllTargets">
-                  전체 선택
-                </button>
-                <button class="button button-ghost" @click="clearAllTargets">
-                  전체 해제
-                </button>
+                <div class="manager-section-title-inline">
+                  <h4>타겟 라인 선택</h4>
+                  <div class="macro-card-actions">
+                    <button
+                      class="button button-ghost macro-card-action"
+                      @click="selectAllTargets"
+                    >
+                      전체 선택
+                    </button>
+                    <button
+                      class="button button-ghost macro-card-action"
+                      @click="clearAllTargets"
+                    >
+                      전체 해제
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="check-grid">
+            <div class="check-grid choice-grid-inline">
               <label
                 v-for="item in targetLineOptions"
                 :key="item"
@@ -772,29 +786,17 @@ async function resetFlow() {
             <div class="operation-console">
               <div class="operation-console-main operation-console-main-full">
                 <div class="operation-button-grid">
-                  <button
-                    class="button button-primary operation-button"
-                    @click="run('copy')"
-                  >
+                  <button class="button operation-button operation-button-step-1" @click="run('copy')">
                     <strong>복사</strong>
                   </button>
-                  <button
-                    class="button button-secondary operation-button"
-                    @click="run('compile')"
-                  >
+                  <button class="button operation-button operation-button-step-2" @click="run('compile')">
                     <strong>컴파일</strong>
                   </button>
-                  <button
-                    class="button button-accent operation-button"
-                    @click="run('test')"
-                  >
+                  <button class="button operation-button operation-button-step-3" @click="run('test')">
                     <strong>테스트</strong>
                   </button>
-                  <button
-                    class="button button-ghost operation-button"
-                    @click="generateAggregateSummary"
-                  >
-                    <strong>테스트 결과서 생성</strong>
+                  <button class="button operation-button operation-button-step-4" @click="generateAggregateSummary">
+                    <strong>결과서 생성</strong>
                   </button>
                 </div>
               </div>

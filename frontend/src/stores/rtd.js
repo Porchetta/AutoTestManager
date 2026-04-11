@@ -48,7 +48,13 @@ export const useRtdStore = defineStore('rtd', () => {
   }))
 
   async function loadInitialData() {
-    businessUnits.value = (await apiGet('/api/rtd/business-units')).items
+    const items = (await apiGet('/api/rtd/business-units')).items
+    const priority = ['memory', 'foundry']
+    const rank = (name) => {
+      const idx = priority.indexOf(String(name).trim().toLowerCase())
+      return idx === -1 ? priority.length : idx
+    }
+    businessUnits.value = [...items].sort((a, b) => rank(a) - rank(b))
     await restoreSession()
   }
 

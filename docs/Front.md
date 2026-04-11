@@ -10,7 +10,8 @@
 - State Management: Pinia
 - Router: Vue Router
 - HTTP Client: Axios
-- Styling: 전역 다크 테마 + 화면별 컴포넌트 스타일
+- Styling: 라이트 기본 테마 + 다크 토글, 전역 CSS 토큰 기반 디자인 시스템 (`style.css`)
+- 폰트: Inter, IBM Plex Sans (Google Fonts)
 - Build: Docker image 생성 가능
 - Deploy: 오프라인 환경 정적 배포 가능 구조
 
@@ -20,8 +21,9 @@
 - 전체 화면은 Sidebar + Main Content 구조를 사용한다.
 - 로그인 이후 Sidebar는 항상 표시한다.
 - Main Content 영역은 라우터 기반으로 페이지를 렌더링한다.
-- 현재 구현은 `Premium Console` 스타일의 다크 운영 화면을 기본 시각 언어로 사용한다.
-- Sidebar는 비교적 슬림한 고정 레일 형태를 사용하고, 상단 헤더는 페이지 제목 + 사용자 메타 + 로그아웃 아이콘 구조를 사용한다.
+- 엔터프라이즈 신뢰감 톤의 라이트 테마를 기본으로 사용하며, 다크 테마로 전환 가능하다.
+- Sidebar는 슬림한 고정 레일 형태를 사용하고, 상단 헤더는 페이지 제목 + 사용자 메타 + 테마 토글 + 로그아웃 아이콘 구조를 사용한다.
+- 활성 사이드바 메뉴는 정확한 경로 일치(`router-link-exact-active`) 기준으로 하이라이트된다.
 
 ### 3.2 Sidebar 메뉴
 - DashBoard
@@ -34,12 +36,24 @@
 - 로그아웃은 Sidebar 하단이 아니라 우측 상단 헤더 영역의 아이콘 버튼으로 제공한다.
 
 ### 3.3 공통 UX 원칙
-- 기본 테마는 다크 테마다.
+- 기본 테마는 라이트 테마이며, 우측 상단 헤더의 토글 버튼으로 다크 테마로 전환할 수 있다.
+- 테마 설정은 `localStorage`(`atm-theme`)에 저장되어 새로고침 후에도 유지된다.
 - 주요 액션은 로딩 상태를 표시한다.
 - API 실패 시 전역 Toast 메시지로 사용자에게 안내한다.
 - 삭제 같은 중요 액션은 브라우저 기본 `confirm` 대신 커스텀 확인 모달을 사용한다.
 - 인증 만료 시 저장된 인증 정보를 제거하고 `/login`으로 이동한다.
 - 진행 중 작업이 있는 화면은 서버 세션 기준으로 복원한다.
+
+### 3.4 디자인 시스템
+- CSS 토큰은 `:root`(라이트)와 `[data-theme="dark"]` 오버라이드로 이중 구성한다.
+- 컬러: teal(`--accent`) 계열을 주요 액센트로 사용하며, success/warning/danger/info 시맨틱 컬러를 분리한다.
+- 버튼 종류: `button-primary`(solid teal), `button-secondary`(solid blue), `button-ghost`(중립), `button-danger`(적색 경계)
+- 선택 상태 UI: 버튼/카드의 선택 상태는 `data-selected="true"` 또는 `:has(input:checked)`로 제어한다.
+- 상태 배지: `.status-badge[data-status]`로 RUNNING/SUCCESS/FAILED/WARNING 등 상태를 시각화한다.
+- 공통 클래스:
+  - `.choice-grid-inline`: 선택 버튼을 내용 너비 기준으로 flex wrap 나열
+  - `.check-grid` + `.choice-grid-inline`: 체크카드도 동일 레이아웃 공유
+  - `.manager-section-title-inline`: 제목 h4와 pill/버튼을 가로로 정렬
 
 ## 4. 라우팅 구조
 - `/login`
