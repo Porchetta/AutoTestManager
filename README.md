@@ -17,6 +17,7 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
   - Macro 확인은 사용자가 `탐색` 버튼을 눌렀을 때만 `.rule` / macro 파일을 읽어 비교
   - 복사 / 컴파일 / 테스트는 커스텀 가능한 실행 훅을 통해 수행
   - 타겟 라인별 상태 모니터와 Raw Data 다운로드 제공
+  - Step 6 `Execute all`로 `복사 -> 컴파일 -> 테스트 -> 결과서 생성`을 순차 실행 가능
   - 테스트 결과서 생성 시 선택된 라인의 최신 테스트 결과를 모아 `.xlsx`로 다운로드
   - 개발 라인 자체는 복사 대상에서 제외
 - ezDFS
@@ -82,10 +83,13 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
   - `컴파일`
   - `테스트`
   - `테스트 결과서 생성`
+  - `Execute all`
+- `Execute all`은 위 4개 과정을 순서대로 끝까지 실행하며, 중간 실패 시 다음 단계로 넘어가지 않음
 - 하단 `Target Status Monitor`
   - 라인별 상태 chip
   - 개별 `복사 / 컴파일 / 테스트`
   - `Raw Data` 다운로드
+  - compact monitor tile 레이아웃 사용
 - 실행 제어 패널에서는 `초기화`로 세션과 선택 상태를 모두 비우고 Step 1로 복귀 가능
 - 세션 저장 / 복원
 
@@ -196,6 +200,7 @@ npm run dev
 정책:
 - DB에는 결과 본문이 아니라 파일 경로를 저장
 - 다운로드 파일명은 실제 저장된 파일명을 그대로 사용
+- monitor의 Raw Data 다운로드는 현재 로그인 사용자 기준 가장 최근 `TEST/RETEST` 결과가 raw를 만든 경우에만 활성화
 - SSH 병렬 제한 감지 실패 알람 로그: `backend/data/logs/admin_alert.log`
 
 ## 현재 구현 정책

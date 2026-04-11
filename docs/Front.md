@@ -10,7 +10,8 @@
 - State Management: Pinia
 - Router: Vue Router
 - HTTP Client: Axios
-- Styling: 전역 다크 테마 + 화면별 컴포넌트 스타일
+- Styling: 라이트 기본 테마 + 다크 토글, 전역 CSS 토큰 기반 디자인 시스템 (`style.css`)
+- 폰트: Inter, IBM Plex Sans (Google Fonts)
 - Build: Docker image 생성 가능
 - Deploy: 오프라인 환경 정적 배포 가능 구조
 
@@ -20,6 +21,9 @@
 - 전체 화면은 Sidebar + Main Content 구조를 사용한다.
 - 로그인 이후 Sidebar는 항상 표시한다.
 - Main Content 영역은 라우터 기반으로 페이지를 렌더링한다.
+- 엔터프라이즈 신뢰감 톤의 라이트 테마를 기본으로 사용하며, 다크 테마로 전환 가능하다.
+- Sidebar는 슬림한 고정 레일 형태를 사용하고, 상단 헤더는 페이지 제목 + 사용자 메타 + 테마 토글 + 로그아웃 아이콘 구조를 사용한다.
+- 활성 사이드바 메뉴는 정확한 경로 일치(`router-link-exact-active`) 기준으로 하이라이트된다.
 
 ### 3.2 Sidebar 메뉴
 - DashBoard
@@ -27,15 +31,29 @@
 - ezDFS Test
 - Admin
 - My Page
-- Logout
+
+정책:
+- 로그아웃은 Sidebar 하단이 아니라 우측 상단 헤더 영역의 아이콘 버튼으로 제공한다.
 
 ### 3.3 공통 UX 원칙
-- 기본 테마는 다크 테마다.
+- 기본 테마는 라이트 테마이며, 우측 상단 헤더의 토글 버튼으로 다크 테마로 전환할 수 있다.
+- 테마 설정은 `localStorage`(`atm-theme`)에 저장되어 새로고침 후에도 유지된다.
 - 주요 액션은 로딩 상태를 표시한다.
 - API 실패 시 전역 Toast 메시지로 사용자에게 안내한다.
 - 삭제 같은 중요 액션은 브라우저 기본 `confirm` 대신 커스텀 확인 모달을 사용한다.
 - 인증 만료 시 저장된 인증 정보를 제거하고 `/login`으로 이동한다.
 - 진행 중 작업이 있는 화면은 서버 세션 기준으로 복원한다.
+
+### 3.4 디자인 시스템
+- CSS 토큰은 `:root`(라이트)와 `[data-theme="dark"]` 오버라이드로 이중 구성한다.
+- 컬러: teal(`--accent`) 계열을 주요 액센트로 사용하며, success/warning/danger/info 시맨틱 컬러를 분리한다.
+- 버튼 종류: `button-primary`(solid teal), `button-secondary`(solid blue), `button-ghost`(중립), `button-danger`(적색 경계)
+- 선택 상태 UI: 버튼/카드의 선택 상태는 `data-selected="true"` 또는 `:has(input:checked)`로 제어한다.
+- 상태 배지: `.status-badge[data-status]`로 RUNNING/SUCCESS/FAILED/WARNING 등 상태를 시각화한다.
+- 공통 클래스:
+  - `.choice-grid-inline`: 선택 버튼을 내용 너비 기준으로 flex wrap 나열
+  - `.check-grid` + `.choice-grid-inline`: 체크카드도 동일 레이아웃 공유
+  - `.manager-section-title-inline`: 제목 h4와 pill/버튼을 가로로 정렬
 
 ## 4. 라우팅 구조
 - `/login`
@@ -101,6 +119,8 @@
 - 서비스 소개 및 주요 기능 요약 표시
 - 최근 RTD / ezDFS 테스트 요약 카드 표시
 - 운영 메시지 / 공지 배치 가능 구조 유지
+- 상단 `Operations Overview` hero와 별도 `Overview Console` 섹션을 사용한다.
+- overview 영역은 RTD / ezDFS / Admin 상태를 한 화면에서 요약하는 운영 콘솔형 레이아웃을 사용한다.
 
 ### 6.4 Admin 화면
 - 상단 탭 버튼 분리형 레이아웃 사용
@@ -111,6 +131,8 @@
   - ezDFS Settings
 - 탭은 상단에 분리된 버튼처럼 보이고, 선택된 탭은 아래 패널과 연결된 형태로 표시한다.
 - 모든 삭제 액션은 공통 확인 모달을 사용한다.
+- 현재 구현은 좌측 등록 폼 + 우측 데이터 그리드를 공통으로 사용하는 `console grid` 톤을 사용한다.
+- 등록 폼은 sticky panel처럼 보이고, 목록은 dense data grid 스타일로 정리한다.
 
 #### 6.4.1 User Management
 - 사용자 목록 테이블 표시
@@ -238,10 +260,13 @@
 - 정렬 상태는 새로고침 시 유지하지 않는다.
 - 편집 중인 row는 배경색으로 강조한다.
 - `modifier`, `actions` 컬럼은 폭을 안정적으로 유지해 표가 틀어지지 않게 한다.
+- 테이블 헤더는 dense console grid 톤으로 고정하고, 액션 버튼은 작은 사각형 컨트롤 스타일을 사용한다.
 
 ### 6.5 RTD Test 화면
 - 6단계 Manager 형식으로 구현
 - 상단 단계 선택 바 + 단일 작업 영역 + 하단 `Target Status Monitor` 구조를 사용한다.
+- Step strip은 화면 끝까지 늘어나는 버튼 줄이 아니라, 가운데 정렬된 상단 제어 바 형태를 사용한다.
+- 전체 RTD 화면은 compact console density 기준으로 카드와 패널 크기를 조정한다.
 
 #### Step 1. 사업부 선택
 - 단일 선택
@@ -255,12 +280,13 @@
 #### Step 3. Rule 선택
 - line 기준 Rule 목록 조회
 - 단순 체크박스 방식이 아니라 누적 추가 방식으로 동작한다.
+- 입력부는 압축된 toolbar 형태로 제공한다.
 - 세부 흐름
   - `Rule 선택`
   - `Old version 선택`
   - `New version 선택`
   - `추가`
-- 추가된 Rule target 목록을 별도로 표시한다.
+- 추가된 Rule target 목록은 별도의 selection tray 영역에 표시한다.
 - 같은 Rule 조합은 중복 추가하지 않는다.
 - Rule / Version 목록을 가져오지 못하면 Rule 드롭다운에 `error`가 표시된다.
 
@@ -269,6 +295,7 @@
 - old rule 파일과 new rule 파일의 내용이 다른 경우에만 macro 차이를 보여준다.
 - Step 진입 시 자동 탐색하지 않고, 사용자가 `탐색` 버튼을 눌렀을 때만 조회한다.
 - 화면은 `Old Macro`, `New Macro` 2개 영역으로 구성한다.
+- `Old / New` 결과는 console card 스타일로 표시한다.
 - 각 macro 항목 우측 체크박스로 복사 대상 포함 여부를 선택한다.
 - 탐색 완료 후 `Old / New` macro는 기본적으로 모두 선택된 상태로 시작한다.
 - 각 카드 헤더에 `전체선택`, `전체 해제` 버튼을 제공한다.
@@ -282,16 +309,22 @@
 - 선택된 타겟 라인은 Step 6 monitor 기준이 된다.
 
 #### Step 6. 실행 제어
-- 상단 액션 버튼 4개를 제공한다.
+- 상단 `Process` 패널을 제공한다.
+- `Process` 패널 안에는 아래 액션 버튼을 순차 흐름으로 배치한다.
   - `복사`
   - `컴파일`
   - `테스트`
   - `테스트 결과서 생성`
+- `Execute all`
 - 상단 `복사 / 컴파일 / 테스트`는 현재 선택된 모든 타겟 라인에 대해 한 번에 요청한다.
 - `테스트 결과서 생성`은 현재 선택된 타겟 라인들의 최신 테스트 결과를 모아 집계 결과서(`.xlsx`)를 다운로드한다.
 - 상단 버튼 순서는 `복사 / 컴파일 / 테스트 / 테스트 결과서 생성`이다.
+- `Execute all`은 `복사 -> 컴파일 -> 테스트 -> 테스트 결과서 생성` 순으로 모두 끝날 때까지 순차 진행한다.
+- 중간 단계 실패 시 이후 단계는 진행하지 않는다.
 - 선택된 개발 라인은 복사 대상에서 제외한다.
 - 하단 `Target Status Monitor`는 타겟 라인별 카드형 모니터를 표시한다.
+- monitor 카드는 일반 대형 카드보다 더 작은 compact console tile 스타일을 사용한다.
+- 넓은 화면에서는 한 줄에 여러 라인 카드가 촘촘하게 배치되도록 monitor 전용 grid를 사용한다.
 - 각 카드에는 아래 항목이 표시된다.
   - 라인명
   - 현재 상태 chip
@@ -306,11 +339,11 @@
   - `대기 [이름]`
 - 카드 내부 `복사 / 컴파일 / 테스트` 버튼은 해당 라인만 개별 실행한다.
 - 개발 라인 카드의 `복사` 버튼은 비활성화한다.
-- 카드 내부 `Raw Data` 버튼은 해당 라인의 최신 테스트 raw data가 있을 때만 활성화된다.
+- 카드 내부 `Raw Data` 버튼은 현재 로그인 사용자의 해당 라인 최신 `TEST/RETEST` 이력이 raw data를 만든 경우에만 활성화된다.
 - `Raw Data` 버튼은 활성화 시 실제 저장된 파일명으로 `.txt`를 다운로드한다.
 - 액션 상태 표현 규칙
-  - 성공: `✅`
-  - 실패: `❌`
+  - 성공: 초록색 체크 아이콘
+  - 실패: 실패 아이콘
   - 진행중 / 대기중: spinner
 - 실패한 경우에만 hover title로 예외 원인을 보여준다.
 - polling으로 상태를 주기적으로 갱신한다.
@@ -381,7 +414,10 @@
 
 공통 스타일 규칙:
 - 다크 테마 유지
+- `Premium Console` 스타일 유지
 - 컴팩트 필터 드롭다운 사용
+- 상단 헤더의 사용자 정보는 pill 대신 부드러운 사각형 badge를 사용한다
+- 로그아웃은 우측 상단 헤더의 아이콘 버튼으로 제공한다
 - 긴 경로 / 긴 문자열은 필요한 컬럼에서 말줄임 처리
 - 편집 가능한 테이블 row는 인라인 입력 컴포넌트 사용
 
