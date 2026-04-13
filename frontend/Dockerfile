@@ -1,19 +1,17 @@
-FROM node:20-alpine AS build
+FROM node:20-alpine
+
+RUN apk add --no-cache nginx
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install && npm cache clean --force
 
-COPY . .
-RUN npm run build
+COPY nginx.conf /etc/nginx/http.d/default.conf
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-FROM nginx:1.27-alpine
+EXPOSE 5173 20216
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
-
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
-
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["dev"]

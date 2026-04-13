@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 개발 모드 실행
+# - Backend: uvicorn --reload (소스 변경 자동 반영)
+# - Frontend: Vite dev server HMR (소스 변경 자동 반영)
+# - Backend 포트 20223, Frontend 포트 20216 모두 외부 노출
+#
+# Usage: ./deploy/run-dev.sh [IMAGE_VERSION]
+# IMAGE_VERSION 생략 시 latest 사용
+
+BASE_DIR="/opt/atm"
+VERSION="${1:-latest}"
+SERVER_IP="$(hostname -I | awk '{print $1}')"
+BACKEND_API_URL="http://${SERVER_IP}:20223"
+
+if [[ ! -f "${BASE_DIR}/backend.env" ]]; then
+  echo "ERROR: ${BASE_DIR}/backend.env not found."
+  echo "Run ./deploy/setup.sh first."
+  exit 1
+fi
+
+echo "=== Stopping existing containers ==="
+docker stop atm-backend atm-frontend 2>/dev/null || true
+docker rm   atm-backend atm-frontend 2>/dev/null || true
+
+echo ""
+echo "=== Starting backend (dev, --reload) ==="
+docker run -d \
+  --name atm-backend \
+  --network atm-net \
+  --restart unless-stopped \
+  -p 20223:8000 \
+  -v "${BASE_DIR}/backend/app:/app/app" \
+  -v "${BASE_DIR}/data:/data" \
+  --env-file "${BASE_DIR}/backend.env" \
+  atm-backend:"${VERSION}" \
+  uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+echo ""
+echo "=== Starting frontend (dev, Vite HMR, port 20216) ==="
+echo "    VITE_API_BASE_URL=${BACKEND_API_URL}"
+docker run -d \
+  --name atm-frontend \
+  --restart unless-stopped \
+  -p 20216:5173 \
+  -v "${BASE_DIR}/frontend:/app" \
+  -v atm-frontend-nm:/app/node_modules \
+  -e ATM_MODE=dev \
+  -e VITE_API_BASE_URL="${BACKEND_API_URL}" \
+  atm-frontend:"${VERSION}"
+
+echo ""
+echo "======================================"
+echo "Dev environment started (image: ${VERSION})"
+echo ""
+echo "  Frontend : http://${SERVER_IP}:20216"
+echo "  Backend  : http://${SERVER_IP}:20223"
+echo "  API Docs : http://${SERVER_IP}:20223/docs"
+echo ""
+echo "소스 수정 후 저장하면 자동 반영됩니다."
+echo "  Backend  : /opt/atm/backend/app/"
+echo "  Frontend : /opt/atm/frontend/src/"
+echo ""
+echo "로그 확인:"
+echo "  docker logs -f atm-backend"
+echo "  docker logs -f atm-frontend"
+echo "======================================"
+
+docker ps --filter name=atm-
