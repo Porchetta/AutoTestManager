@@ -459,6 +459,12 @@ p { margin: 0; }
   align-content: start;
 }
 
+.panel-subcard-fit {
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 /* ---------- Metric ---------- */
 .metric-card {
   display: flex;
@@ -814,9 +820,15 @@ select option {
 }
 
 .ezdfs-rule-board {
-  grid-template-columns: repeat(auto-fit, minmax(320px, 360px));
+  display: flex;
+  flex-wrap: nowrap;
   gap: 10px;
-  justify-content: start;
+  align-items: start;
+}
+
+.ezdfs-rule-board .ezdfs-rule-card {
+  flex: 0 0 auto;
+  width: min(100%, 280px);
 }
 
 .ezdfs-rule-card {

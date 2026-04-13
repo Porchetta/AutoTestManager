@@ -142,9 +142,11 @@ const selectionStats = computed(() => [
   },
 ]);
 
-const selectedRuleNames = computed(() =>
-  [...new Set(selectedRuleTargets.value.map((item) => item.rule_name).filter(Boolean))]
-);
+const selectedRuleNames = computed(() => [
+  ...new Set(
+    selectedRuleTargets.value.map((item) => item.rule_name).filter(Boolean),
+  ),
+]);
 
 onMounted(async () => {
   await rtdStore.loadInitialData();
@@ -403,7 +405,9 @@ async function executeAllProcess() {
         copyItems.map((item) => item.task_id),
       );
       if (copyResults.some((item) => item.status !== "DONE")) {
-        uiStore.setError("복사 단계에서 실패가 발생해 전체 실행을 중단했습니다.");
+        uiStore.setError(
+          "복사 단계에서 실패가 발생해 전체 실행을 중단했습니다.",
+        );
         return;
       }
     }
@@ -417,7 +421,9 @@ async function executeAllProcess() {
       compileItems.map((item) => item.task_id),
     );
     if (compileResults.some((item) => item.status !== "DONE")) {
-      uiStore.setError("컴파일 단계에서 실패가 발생해 전체 실행을 중단했습니다.");
+      uiStore.setError(
+        "컴파일 단계에서 실패가 발생해 전체 실행을 중단했습니다.",
+      );
       return;
     }
 
@@ -430,7 +436,9 @@ async function executeAllProcess() {
       testItems.map((item) => item.task_id),
     );
     if (testResults.some((item) => item.status !== "DONE")) {
-      uiStore.setError("테스트 단계에서 실패가 발생해 전체 실행을 중단했습니다.");
+      uiStore.setError(
+        "테스트 단계에서 실패가 발생해 전체 실행을 중단했습니다.",
+      );
       return;
     }
 
@@ -851,16 +859,7 @@ async function resetFlow() {
               </div>
             </div>
 
-            <div
-              v-if="selectedRuleNames.length"
-              class="panel-subcard macro-console-card"
-            >
-              <div class="panel-head">
-                <div class="macro-card-head-copy">
-                  <h4>주요 변경 항목</h4>
-                  <span class="pill pill-ghost">{{ selectedRuleNames.length }} Rules</span>
-                </div>
-              </div>
+            <div v-if="selectedRuleNames.length" class="panel-subcard panel-subcard-fit">
               <div class="task-grid compact-grid ezdfs-rule-board">
                 <div
                   v-for="ruleName in selectedRuleNames"
@@ -932,14 +931,19 @@ async function resetFlow() {
                       </button>
                     </div>
                   </div>
-                  <div class="operation-process-divider" aria-hidden="true"></div>
+                  <div
+                    class="operation-process-divider"
+                    aria-hidden="true"
+                  ></div>
                   <div class="operation-process-execute">
                     <button
                       class="button button-primary operation-button operation-button-execute-all"
                       :disabled="executeAllLoading"
                       @click="executeAllProcess"
                     >
-                      <strong>{{ executeAllLoading ? "Executing..." : "Execute all" }}</strong>
+                      <strong>{{
+                        executeAllLoading ? "Executing..." : "Execute all"
+                      }}</strong>
                     </button>
                   </div>
                 </div>
@@ -1020,7 +1024,10 @@ async function resetFlow() {
               <span class="monitor-action-meta">
                 <span
                   v-if="monitorActionDisplay(item.copy.status)"
-                  :class="['monitor-action-emoji', monitorActionIconClass(item.copy.status)]"
+                  :class="[
+                    'monitor-action-emoji',
+                    monitorActionIconClass(item.copy.status),
+                  ]"
                 >
                   {{ monitorActionDisplay(item.copy.status) }}
                 </span>
@@ -1042,7 +1049,10 @@ async function resetFlow() {
               <span class="monitor-action-meta">
                 <span
                   v-if="monitorActionDisplay(item.compile.status)"
-                  :class="['monitor-action-emoji', monitorActionIconClass(item.compile.status)]"
+                  :class="[
+                    'monitor-action-emoji',
+                    monitorActionIconClass(item.compile.status),
+                  ]"
                 >
                   {{ monitorActionDisplay(item.compile.status) }}
                 </span>
@@ -1064,7 +1074,10 @@ async function resetFlow() {
               <span class="monitor-action-meta">
                 <span
                   v-if="monitorActionDisplay(item.test.status)"
-                  :class="['monitor-action-emoji', monitorActionIconClass(item.test.status)]"
+                  :class="[
+                    'monitor-action-emoji',
+                    monitorActionIconClass(item.test.status),
+                  ]"
                 >
                   {{ monitorActionDisplay(item.test.status) }}
                 </span>
