@@ -9,7 +9,7 @@ set -euo pipefail
 # Usage: ./deploy/run-dev.sh [IMAGE_VERSION]
 # IMAGE_VERSION 생략 시 latest 사용
 
-BASE_DIR="/opt/atm"
+BASE_DIR="/home/hyun/develope/AutoTestManager"
 VERSION="${1:-latest}"
 SERVER_IP="$(hostname -I | awk '{print $1}')"
 BACKEND_API_URL="http://${SERVER_IP}:20223"

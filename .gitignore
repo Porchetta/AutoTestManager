@@ -13,3 +13,9 @@ Thumbs.db
 .env.local
 
 .claude/
+
+*.tar.gz
+
+data/
+backend/data/
+*.db

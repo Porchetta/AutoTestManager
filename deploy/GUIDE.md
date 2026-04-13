@@ -86,10 +86,12 @@ git clone http://내부git서버/AutoTestManager /opt/atm
 cp -r /media/usb/AutoTestManager /opt/atm
 ```
 
-### 3-2. Docker 이미지 로드
+### 3-2. setup.sh 실행 (이미지 로드 + 디렉토리 생성 + env 파일 생성)
 
 ```bash
-docker load < atm-images-YYYYMMDD_HHMM.tar.gz
+cd /opt/atm
+chmod +x deploy/setup.sh
+./deploy/setup.sh atm-images-YYYYMMDD_HHMM.tar.gz
 ```
 
 확인:
@@ -99,26 +101,9 @@ docker images | grep atm
 # atm-frontend  20260414_1030   ...
 ```
 
-### 3-3. Docker 네트워크 생성
+### 3-3. 환경 변수 설정
 
 ```bash
-docker network create atm-net
-```
-
-### 3-4. 데이터 디렉토리 생성
-
-```bash
-mkdir -p /opt/atm/data/results/rtd/raw
-mkdir -p /opt/atm/data/results/rtd/reports
-mkdir -p /opt/atm/data/results/ezdfs/raw
-mkdir -p /opt/atm/data/results/ezdfs/reports
-mkdir -p /opt/atm/data/logs
-```
-
-### 3-5. 환경 변수 설정
-
-```bash
-cp /opt/atm/deploy/backend.env.example /opt/atm/backend.env
 vi /opt/atm/backend.env
 ```
 

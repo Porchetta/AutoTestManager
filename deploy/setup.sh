@@ -2,35 +2,30 @@
 set -euo pipefail
 
 # AutoTestManager 운영 서버 최초 초기화 스크립트
-# 1회만 실행. 이미지 로드 + 디렉토리 구성 + env 파일 생성
+# 1회만 실행. 이미지 로드 + 데이터 디렉토리 생성 + env 파일 생성
 #
-# Usage: ./deploy/setup.sh <images.tar.gz> <source.tar.gz>
+# Usage: ./deploy/setup.sh <atm-images-xxx.tar.gz>
 
-IMAGE_TAR="${1:?Usage: ./deploy/setup.sh <atm-images-xxx.tar.gz> <atm-source-xxx.tar.gz>}"
-SOURCE_TAR="${2:?Usage: ./deploy/setup.sh <atm-images-xxx.tar.gz> <atm-source-xxx.tar.gz>}"
-BASE_DIR="/opt/atm"
+IMAGE_TAR="${1:?Usage: ./deploy/setup.sh <atm-images-xxx.tar.gz>}"
+BASE_DIR="/home/hyun/develope/AutoTestManager"
 
-echo "=== [1/4] Creating directory structure under ${BASE_DIR} ==="
-mkdir -p "${BASE_DIR}/backend/app"
-mkdir -p "${BASE_DIR}/frontend/src"
+echo "=== [1/4] Creating data directory structure ==="
 mkdir -p "${BASE_DIR}/data/results/rtd/raw"
 mkdir -p "${BASE_DIR}/data/results/rtd/reports"
 mkdir -p "${BASE_DIR}/data/results/ezdfs/raw"
 mkdir -p "${BASE_DIR}/data/results/ezdfs/reports"
 mkdir -p "${BASE_DIR}/data/logs"
 
-echo "=== [2/4] Extracting source (${SOURCE_TAR}) ==="
-tar xzf "${SOURCE_TAR}" -C "${BASE_DIR}"
-
-echo "=== [3/4] Loading Docker images (${IMAGE_TAR}) ==="
+echo "=== [2/4] Loading Docker images (${IMAGE_TAR}) ==="
 docker load < "${IMAGE_TAR}"
 
-echo "=== [4/4] Creating Docker network ==="
+echo "=== [3/4] Creating Docker network ==="
 docker network create atm-net 2>/dev/null || echo "  (atm-net already exists, skipping)"
 
-echo ""
+echo "=== [4/4] Creating backend.env ==="
 if [[ ! -f "${BASE_DIR}/backend.env" ]]; then
   cp "${BASE_DIR}/deploy/backend.env.example" "${BASE_DIR}/backend.env"
+  echo ""
   echo "======================================"
   echo "Setup complete."
   echo ""
@@ -46,8 +41,10 @@ if [[ ! -f "${BASE_DIR}/backend.env" ]]; then
   echo "   운영 모드: ./deploy/run-prod.sh"
   echo "======================================"
 else
+  echo "  (backend.env already exists, skipping)"
+  echo ""
   echo "======================================"
-  echo "Setup complete. (backend.env already exists, skipped)"
+  echo "Setup complete."
   echo ""
   echo "실행:"
   echo "   개발 모드: ./deploy/run-dev.sh"
