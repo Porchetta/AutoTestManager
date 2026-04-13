@@ -802,6 +802,74 @@ select option {
   align-content: start;
 }
 
+.task-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.task-actions .button {
+  min-height: 34px;
+  padding: 8px 12px;
+}
+
+.ezdfs-rule-board {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 360px));
+  gap: 10px;
+  justify-content: start;
+}
+
+.ezdfs-rule-card {
+  padding: 12px 12px;
+  gap: 8px;
+}
+
+.ezdfs-rule-card .task-head strong {
+  font-size: 0.88rem;
+}
+
+.ezdfs-rule-card .muted {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.ezdfs-major-change-field {
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.ezdfs-major-change-field span {
+  font-size: 0.74rem;
+}
+
+.ezdfs-major-change-field input {
+  min-width: 0;
+  min-height: 32px;
+  font-size: 0.79rem;
+}
+
+.ezdfs-major-change-field textarea {
+  min-width: 0;
+  min-height: 74px;
+  max-height: 74px;
+  padding: 8px 10px;
+  font-size: 0.79rem;
+  line-height: 1.35;
+  overflow-y: auto;
+  resize: none;
+}
+
+.ezdfs-rule-card .task-actions {
+  gap: 6px;
+}
+
+.ezdfs-rule-card .task-actions .button {
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
 .tab-button {
   padding: 8px 14px;
   border-radius: var(--radius);
@@ -926,6 +994,10 @@ select option {
   gap: 10px;
 }
 
+.manager-inline-stats-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .mini-stat {
   display: grid;
   gap: 4px;
@@ -961,6 +1033,10 @@ select option {
   border-radius: var(--radius-lg);
   background: var(--bg-soft);
   border: 1px solid var(--border);
+}
+
+.manager-step-strip-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .manager-step-button {
@@ -1160,6 +1236,10 @@ select option {
   align-items: end;
 }
 
+.rule-toolbar-row-single {
+  grid-template-columns: minmax(0, 240px);
+}
+
 .rule-toolbar-row .rule-builder-field select {
   min-width: 0;
 }
@@ -1181,6 +1261,18 @@ select option {
 .rule-builder-field select,
 .rule-builder-field input {
   min-height: 40px;
+}
+
+.field-static-value {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.9rem;
 }
 
 .rule-builder-action {

@@ -7,9 +7,17 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.core.responses import success_response
 from app.models.entities import User
-from app.schemas.testing import EzdfsActionRequest, EzdfsSessionPayload
-from app.services.catalog_service import get_ezdfs_modules, get_ezdfs_rules
-from app.services.file_service import generate_summary_file, get_existing_download_path
+from app.schemas.testing import EzdfsActionRequest, EzdfsAggregateSummaryRequest, EzdfsSessionPayload
+from app.services.catalog_service import (
+    get_ezdfs_modules,
+    get_ezdfs_rules,
+    get_ezdfs_sub_rules,
+)
+from app.services.file_service import (
+    generate_aggregate_ezdfs_summary_file,
+    generate_summary_file,
+    get_existing_download_path,
+)
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
 from app.services.task_service import (
     create_test_task,
@@ -32,8 +40,27 @@ def modules(
 
 
 @router.get("/rules")
-def rules(module_name: str):
-    return success_response({"items": get_ezdfs_rules(module_name)})
+def rules(
+    module_name: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return success_response({"items": get_ezdfs_rules(db, current_user, module_name)})
+
+
+@router.get("/sub-rules")
+def sub_rules(
+    module_name: str,
+    rule_name: str,
+    file_name: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        items = get_ezdfs_sub_rules(db, current_user, module_name, rule_name, file_name=file_name)
+        return success_response({"items": items, "error": ""})
+    except Exception as exc:  # noqa: BLE001
+        return success_response({"items": ["error"], "error": str(exc)})
 
 
 @router.get("/session")
@@ -51,7 +78,14 @@ def save_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    session = upsert_runtime_session(db, current_user.user_id, TestType.EZDFS, payload.model_dump())
+    existing_payload = get_runtime_session_payload(db, current_user.user_id, TestType.EZDFS)
+    session_payload = payload.model_dump()
+
+    cached_catalog = existing_payload.get("catalog_cache")
+    if cached_catalog and cached_catalog.get("module_name") == session_payload.get("selected_module"):
+        session_payload["catalog_cache"] = cached_catalog
+
+    session = upsert_runtime_session(db, current_user.user_id, TestType.EZDFS, session_payload)
     return success_response({"session": session})
 
 
@@ -76,7 +110,7 @@ def _create_ezdfs_task(
         test_type=TestType.EZDFS,
         action_type=action_type,
         owner_user_id=current_user.user_id,
-        target_name=payload.module_name,
+        target_name=payload.rule_name,
         requested_payload=payload.model_dump(),
         current_step=TaskStep.TESTING,
     )
@@ -159,3 +193,21 @@ def download_summary(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
+
+@router.post("/results/aggregate-summary")
+def download_aggregate_summary(
+    payload: EzdfsAggregateSummaryRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    path = generate_aggregate_ezdfs_summary_file(
+        db,
+        current_user.user_id,
+        payload.module_name,
+        payload.task_ids,
+    )
+    return FileResponse(
+        path=path,
+        filename=path.name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )

@@ -9,6 +9,7 @@ export const useRtdStore = defineStore('rtd', () => {
   const selectedLineName = ref('')
   const selectedRuleTargets = ref([])
   const selectedMacros = ref([])
+  const majorChangeItems = ref({})
   const macroReview = ref({
     searched: false,
     old_macros: [],
@@ -42,6 +43,7 @@ export const useRtdStore = defineStore('rtd', () => {
     selected_rule_targets: selectedRuleTargets.value,
     selected_macros: selectedMacros.value,
     selected_versions: {},
+    major_change_items: majorChangeItems.value,
     macro_review: macroReview.value,
     target_lines: targetLines.value,
     active_task_ids: tasks.value.map((task) => task.task_id),
@@ -164,6 +166,7 @@ export const useRtdStore = defineStore('rtd', () => {
         old_version: '',
       }))
     selectedMacros.value = Array.isArray(session.selected_macros) ? session.selected_macros : []
+    majorChangeItems.value = session.major_change_items || {}
     macroReview.value = {
       searched: Boolean(session.macro_review?.searched),
       old_macros: session.macro_review?.old_macros || [],
@@ -183,6 +186,7 @@ export const useRtdStore = defineStore('rtd', () => {
     selectedLineName.value = ''
     selectedRuleTargets.value = []
     selectedMacros.value = []
+    majorChangeItems.value = {}
     macroReview.value = { searched: false, old_macros: [], new_macros: [], has_diff: false, error: '' }
     targetLines.value = []
     lines.value = []
@@ -194,6 +198,7 @@ export const useRtdStore = defineStore('rtd', () => {
   function resetAfterLine() {
     selectedRuleTargets.value = []
     selectedMacros.value = []
+    majorChangeItems.value = {}
     macroReview.value = { searched: false, old_macros: [], new_macros: [], has_diff: false, error: '' }
     targetLines.value = []
     rules.value = []
@@ -328,6 +333,7 @@ export const useRtdStore = defineStore('rtd', () => {
     selectedLineName.value = ''
     selectedRuleTargets.value = []
     selectedMacros.value = []
+    majorChangeItems.value = {}
     macroReview.value = {
       searched: false,
       old_macros: [],
@@ -344,12 +350,25 @@ export const useRtdStore = defineStore('rtd', () => {
     targetLineOptions.value = []
   }
 
+  async function updateMajorChangeItem(ruleName, value) {
+    if (!ruleName) return
+    const nextItems = { ...majorChangeItems.value }
+    if (value?.trim()) {
+      nextItems[ruleName] = value
+    } else {
+      delete nextItems[ruleName]
+    }
+    majorChangeItems.value = nextItems
+    await saveSession()
+  }
+
   return {
     currentStep,
     selectedBusinessUnit,
     selectedLineName,
     selectedRules,
     selectedMacros,
+    majorChangeItems,
     macroReview,
     targetLines,
     selectedRuleTargets,
@@ -377,6 +396,7 @@ export const useRtdStore = defineStore('rtd', () => {
     downloadSummary,
     downloadAggregateSummary,
     waitForTaskIds,
+    updateMajorChangeItem,
     resetFlow,
   }
 })

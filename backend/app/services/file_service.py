@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.entities import RtdConfig, TestTask
+from app.services.ezdfs_report_custom import build_ezdfs_test_report_file
 from app.services.rtd_report_custom import build_rtd_test_report_file
 from app.utils.enums import TaskStatus
 
@@ -65,6 +66,14 @@ def generate_summary_file(db: Session, task: TestTask) -> Path:
 
     task_dir = _ensure_task_dir(task)
     file_path = task_dir / f"{task.test_type.lower()}_{task.task_id}_summary.xlsx"
+
+    if task.test_type == "EZDFS":
+        build_ezdfs_test_report_file(task, file_path)
+        task.summary_result_path = str(file_path)
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        return file_path
 
     workbook = Workbook()
     sheet = workbook.active
@@ -142,6 +151,39 @@ def generate_aggregate_rtd_summary_file(
     business_unit_token = _build_business_unit_token(db, target_set)
     output_path = report_dir / f"{business_unit_token}-{timestamp}.xlsx"
     return build_rtd_test_report_file(ordered_tasks, output_path)
+
+
+def generate_aggregate_ezdfs_summary_file(
+    db: Session,
+    user_id: str,
+    module_name: str,
+    task_ids: list[str],
+) -> Path:
+    if not module_name:
+        raise HTTPException(status_code=422, detail="module_name is required")
+    if not task_ids:
+        raise HTTPException(status_code=422, detail="task_ids is required")
+
+    ordered_task_ids = list(dict.fromkeys(task_ids))
+    tasks = (
+        db.query(TestTask)
+        .filter(
+            TestTask.user_id == user_id,
+            TestTask.test_type == "EZDFS",
+            TestTask.task_id.in_(ordered_task_ids),
+            TestTask.action_type.in_(["TEST", "RETEST"]),
+        )
+        .all()
+    )
+    task_map = {task.task_id: task for task in tasks if task.status == TaskStatus.DONE.value}
+    ordered_tasks = [task_map[task_id] for task_id in ordered_task_ids if task_id in task_map]
+    if not ordered_tasks:
+        raise HTTPException(status_code=404, detail="No completed ezDFS test results found for selected rules")
+
+    report_dir = Path(settings.result_base_path) / "ezdfs" / "reports" / _sanitize_path_token(user_id)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = report_dir / f"{_sanitize_path_token(module_name)}-{timestamp}.xlsx"
+    return build_ezdfs_test_report_file(ordered_tasks, output_path)
 
 
 def _build_target_line_token(target_lines: list[str]) -> str:

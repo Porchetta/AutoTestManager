@@ -13,6 +13,7 @@ const {
   selectedLineName,
   selectedRuleTargets,
   selectedMacros,
+  majorChangeItems,
   macroReview,
   targetLines,
   monitorItems,
@@ -140,6 +141,10 @@ const selectionStats = computed(() => [
       : "미선택",
   },
 ]);
+
+const selectedRuleNames = computed(() =>
+  [...new Set(selectedRuleTargets.value.map((item) => item.rule_name).filter(Boolean))]
+);
 
 onMounted(async () => {
   await rtdStore.loadInitialData();
@@ -365,6 +370,10 @@ async function run(action) {
   }
   await rtdStore.refreshMonitor();
   uiStore.setNotice(`${action.toUpperCase()} 요청이 등록되었습니다.`);
+}
+
+async function updateMajorChange(ruleName, value) {
+  await rtdStore.updateMajorChangeItem(ruleName, value);
 }
 
 async function generateAggregateSummary() {
@@ -839,6 +848,38 @@ async function resetFlow() {
               <div>
                 <p class="eyebrow">Step 6</p>
                 <h4>Test 실행</h4>
+              </div>
+            </div>
+
+            <div
+              v-if="selectedRuleNames.length"
+              class="panel-subcard macro-console-card"
+            >
+              <div class="panel-head">
+                <div class="macro-card-head-copy">
+                  <h4>주요 변경 항목</h4>
+                  <span class="pill pill-ghost">{{ selectedRuleNames.length }} Rules</span>
+                </div>
+              </div>
+              <div class="task-grid compact-grid ezdfs-rule-board">
+                <div
+                  v-for="ruleName in selectedRuleNames"
+                  :key="`rtd-major-change-${ruleName}`"
+                  class="task-card ezdfs-rule-card"
+                >
+                  <div class="task-head">
+                    <strong>{{ ruleName }}</strong>
+                  </div>
+                  <label class="field ezdfs-major-change-field">
+                    <span>주요 변경 항목</span>
+                    <textarea
+                      rows="3"
+                      :value="majorChangeItems[ruleName] || ''"
+                      placeholder="변경 항목을 입력하세요"
+                      @input="updateMajorChange(ruleName, $event.target.value)"
+                    ></textarea>
+                  </label>
+                </div>
               </div>
             </div>
 

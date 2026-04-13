@@ -66,7 +66,15 @@ export async function apiDelete(url, config = {}) {
 }
 
 export async function downloadFile(url, filenameHint = 'download', config = {}) {
-  const response = await http.get(url, { ...config, responseType: 'blob' })
+  const method = (config.method || 'get').toLowerCase()
+  const requestConfig = {
+    ...config,
+    method,
+    responseType: 'blob',
+  }
+  const response = method === 'get'
+    ? await http.get(url, requestConfig)
+    : await http.request({ url, ...requestConfig })
   const blobUrl = window.URL.createObjectURL(response.data)
   const link = document.createElement('a')
   const disposition = response.headers['content-disposition']
