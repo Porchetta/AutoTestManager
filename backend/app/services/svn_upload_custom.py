@@ -26,11 +26,11 @@ from app.services.catalog_service import (
     find_rule_file_name_in_session,
 )
 from app.services.ezdfs_catalog_custom import (
-    read_rule_source_text as read_ezdfs_rule_source_text,
+    read_rule_source_bytes as read_ezdfs_rule_source_bytes,
 )
 from app.services.rtd_catalog_custom import (
     _build_clean_bash_command as build_rtd_clean_bash_command,
-    read_rule_source_text as read_rtd_rule_source_text,
+    read_rule_source_bytes as read_rtd_rule_source_bytes,
 )
 from app.services.session_service import (
     get_runtime_session_payload,
@@ -122,7 +122,7 @@ def perform_rtd_svn_upload(
                 f"RTD new version file not found in session cache: {rule_name} / {new_version}"
             )
 
-        file_contents[file_name] = read_rtd_rule_source_text(
+        file_contents[file_name] = read_rtd_rule_source_bytes(
             host,
             config.home_dir_path,
             file_name,
@@ -134,7 +134,7 @@ def perform_rtd_svn_upload(
     for macro_file_name in _collect_selected_macro_file_names(selected_macros):
         if macro_file_name not in new_macros:
             continue
-        file_contents[macro_file_name] = _read_rtd_macro_source_text(
+        file_contents[macro_file_name] = _read_rtd_macro_source_bytes(
             host,
             config.home_dir_path,
             macro_file_name,
@@ -205,14 +205,14 @@ def perform_ezdfs_svn_upload(
         raise ValueError("ezDFS host config not found")
 
     svn_host = _build_svn_upload_host()
-    file_contents: dict[str, str] = {}
+    file_contents: dict[str, bytes] = {}
 
     for item in selected_rules:
         file_name = str(item.get("file_name") or "").strip()
         if not file_name:
             continue
         cleaned_file_name = re.sub(r"-ver\..+\.rul$", ".rul", file_name, flags=re.IGNORECASE)
-        file_contents[cleaned_file_name] = read_ezdfs_rule_source_text(
+        file_contents[cleaned_file_name] = read_ezdfs_rule_source_bytes(
             host,
             config.home_dir_path,
             file_name,
@@ -229,7 +229,7 @@ def perform_ezdfs_svn_upload(
             raise ValueError(f"ezDFS sub rule file not found in session cache: {sub_rule_name}")
         
         cleaned_file_name = re.sub(r"-ver\..+\.rul$", ".rul", sub_rule_file_name, flags=re.IGNORECASE)
-        file_contents[cleaned_file_name] = read_ezdfs_rule_source_text(
+        file_contents[cleaned_file_name] = read_ezdfs_rule_source_bytes(
             host,
             config.home_dir_path,
             sub_rule_file_name,
@@ -282,7 +282,7 @@ def _persist_svn_upload_result(
 def _run_svn_upload(
     host: SvnUploadHost,
     user_id: str,
-    file_contents: dict[str, str],
+    file_contents: dict[str, bytes],
     ad_user: str,
     ad_password: str,
     mode: str,
@@ -334,7 +334,7 @@ def _prepare_remote_work_dir(host: SvnUploadHost, work_dir: str) -> None:
 def _upload_remote_files(
     host: SvnUploadHost,
     work_dir: str,
-    file_contents: dict[str, str],
+    file_contents: dict[str, bytes],
     uploaded_file_names: list[str],
 ) -> None:
     """Copy each prepared rule file to the remote work directory over SFTP."""
@@ -344,8 +344,8 @@ def _upload_remote_files(
         try:
             for file_name in uploaded_file_names:
                 remote_path = str(Path(work_dir) / file_name)
-                with sftp.file(remote_path, "w") as remote_file:
-                    remote_file.write(str(file_contents[file_name] or ""))
+                with sftp.file(remote_path, "wb") as remote_file:
+                    remote_file.write(file_contents[file_name] or b"")
         finally:
             sftp.close()
 
@@ -463,27 +463,21 @@ def _collect_selected_sub_rule_names(selected_sub_rules: list[object]) -> list[s
     return result
 
 
-def _read_rtd_macro_source_text(host: HostConfig, home_dir_path: str, file_name: str) -> str:
-    """Read one RTD macro/report file from the sibling Macro directory over SSH."""
-
+def _read_rtd_macro_source_bytes(host: HostConfig, home_dir_path: str, file_name: str) -> bytes:
+    """Read one RTD macro/report file from the sibling Macro directory via SFTP."""
     macro_dir = _macro_dir_from_home(home_dir_path)
-    command = build_rtd_clean_bash_command(
-        f"cd {shlex.quote(macro_dir)} && cat {shlex.quote(file_name)}"
-    )
+    remote_path = f"{macro_dir.rstrip('/')}/{file_name}"
 
     try:
         with open_limited_ssh_client(host) as client:
-            _, stdout, stderr = client.exec_command(command, timeout=10)
-            exit_status = stdout.channel.recv_exit_status()
-            output = stdout.read().decode("utf-8", errors="ignore")
-            error_output = stderr.read().decode("utf-8", errors="ignore").strip()
+            sftp = client.open_sftp()
+            try:
+                with sftp.open(remote_path, "rb") as remote_file:
+                    return remote_file.read()
+            finally:
+                sftp.close()
     except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SSH macro file read failed: {exc}") from exc
-
-    if exit_status != 0:
-        raise RuntimeError(error_output or f"Failed to read RTD macro file: {file_name}")
-
-    return output
+        raise RuntimeError(f"SFTP macro file byte read failed: {exc}") from exc
 
 
 def _macro_dir_from_home(home_dir_path: str) -> str:
