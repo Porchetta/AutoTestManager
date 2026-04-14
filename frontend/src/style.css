@@ -997,6 +997,260 @@ select option {
   gap: 10px;
 }
 
+/* ---------- MyPage Layout ---------- */
+.mypage-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+}
+
+.mypage-grid .mini-stat {
+  padding: 8px 6px;
+}
+
+.mypage-grid .mini-stat span {
+  font-size: 0.65rem;
+}
+
+.mypage-grid .mini-stat strong {
+  font-size: 0.8rem;
+}
+
+/* ---------- MyPage Stats Chart ---------- */
+.stats-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.stats-panel-head {
+  margin-bottom: 10px !important;
+}
+
+.stats-loading {
+  padding: 8px 0;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.stats-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  flex: 1;
+}
+
+.stats-mini-chart {
+  background: var(--panel-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stats-mini-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted-strong);
+  line-height: 1;
+}
+
+.stats-mini-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 36px;
+  overflow: hidden;
+}
+
+.stats-mini-bar {
+  flex: 1;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+  transition: height 0.2s ease;
+  cursor: default;
+  opacity: 0.8;
+}
+
+.stats-mini-bar:hover {
+  opacity: 1;
+}
+
+/* ezDFS 차트(3·4번째)는 파란색 */
+.stats-mini-chart:nth-child(n+3) .stats-mini-bar {
+  background: var(--secondary);
+}
+
+.stats-mini-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6rem;
+  color: var(--muted);
+  line-height: 1;
+}
+
+/* ---------- MyPage Result Panels ---------- */
+.result-panels-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.result-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.result-panel-head {
+  margin-bottom: 10px !important;
+}
+
+.result-panel-head h3 {
+  font-size: 0.9rem;
+}
+
+.result-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.result-select {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-sunken);
+  color: var(--text);
+  font-size: 0.78rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.result-select:focus {
+  border-color: var(--border-focus);
+}
+
+.result-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: calc(5 * 30px + 4 * 4px);
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--panel-sunken);
+  border: 1px solid var(--border);
+  min-height: 30px;
+}
+
+.result-label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.result-tag {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+
+.result-tag + .result-tag::before {
+  content: "/";
+  margin-right: 4px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.result-time {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.result-empty {
+  font-size: 0.82rem;
+  padding: 8px 0;
+  text-align: center;
+}
+
+.result-dl-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  padding: 0;
+}
+
+.result-dl-btn:hover {
+  color: var(--accent);
+  background: var(--accent-tint);
+}
+
+.result-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.result-page-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--panel-sunken);
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.result-page-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.result-page-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 /* ---------- RTD Manager ---------- */
 .manager-banner {
   display: grid;
@@ -2179,6 +2433,23 @@ select option {
   margin-top: 24px;
 }
 
+/* ---------- Dashboard Stats Grid ---------- */
+.dashboard-stats-grid {
+  gap: 16px;
+}
+
+.dashboard-stats-grid .stats-mini-chart {
+  padding: 10px 12px 8px;
+}
+
+.dashboard-stats-grid .stats-mini-bars {
+  height: 56px;
+}
+
+.dashboard-stats-grid .stats-mini-bar:nth-child(n) {
+  /* ezDFS 구분: 3·4번째 차트는 부모 nth-child로 구분되므로 색상은 기존 CSS 그대로 */
+}
+
 /* ---------- Dashboard Specific ---------- */
 .dashboard-hero {
   display: grid;
@@ -2213,14 +2484,16 @@ select option {
 
 .dashboard-summary-rail {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
 }
 
 .dashboard-summary-tile {
   display: grid;
-  gap: 6px;
-  min-height: 100px;
-  padding: 18px;
+  gap: 4px;
+  min-height: unset;
+  padding: 12px 14px;
   border-radius: var(--radius-lg);
   background: var(--panel);
   border: 1px solid var(--border);
@@ -2228,7 +2501,7 @@ select option {
 }
 
 .dashboard-summary-tile strong {
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
@@ -2238,7 +2511,7 @@ select option {
 .dashboard-summary-tile p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
 }
 
 .dashboard-overview-console {

@@ -191,13 +191,13 @@ def get_rtd_raw_rule_file_map(task: TestTask) -> dict[str, Path]:
 
 
 def get_ezdfs_raw_content_path(task: TestTask) -> Path | None:
-    """Return the saved ezDFS raw content txt path for one ezDFS test task."""
+    """Return the saved ezDFS rule-named raw content txt path for one ezDFS test task."""
     if not task.raw_result_path:
         return None
 
     meta_path = Path(task.raw_result_path)
     raw_task_dir = meta_path.parent
-    raw_path = raw_task_dir / "raw.txt"
+    raw_path = raw_task_dir / _build_ezdfs_raw_file_name(task)
     if raw_path.exists():
         return raw_path
     return None
@@ -378,7 +378,8 @@ def _write_ezdfs_raw_files(
         meta_lines.append(f"command={command_text}")
     meta_content = "\n".join(meta_lines)
     meta_path.write_text(meta_content, encoding="utf-8")
-    (raw_task_dir / "raw.txt").write_text(detail_text, encoding="utf-8")
+    raw_file_name = _build_ezdfs_raw_file_name(task)
+    (raw_task_dir / raw_file_name).write_text(detail_text, encoding="utf-8")
     return meta_path
 
 
@@ -409,6 +410,13 @@ def _split_ezdfs_raw_output(raw_output: str) -> tuple[str, str]:
     return command_text, "\n".join(detail_lines).strip()
 
 
+def _build_ezdfs_raw_file_name(task: TestTask) -> str:
+    """Build a stable ezDFS raw txt filename from the selected rule name."""
+    rule_name = _extract_ezdfs_rule_name(task)
+    rule_token = _sanitize_path_token(rule_name) if rule_name else "raw"
+    return f"{rule_token}.txt"
+
+
 def _extract_rtd_rule_name(task: TestTask) -> str:
     try:
         requested_payload = json.loads(task.requested_payload_json or "{}")
@@ -435,3 +443,22 @@ def _extract_rtd_rule_name(task: TestTask) -> str:
             if rule_name:
                 return rule_name
     return ""
+
+
+def _extract_ezdfs_rule_name(task: TestTask) -> str:
+    """Extract the selected ezDFS rule name from one stored task payload."""
+    try:
+        requested_payload = json.loads(task.requested_payload_json or "{}")
+    except Exception:  # noqa: BLE001
+        return ""
+
+    nested_payload = (
+        requested_payload.get("payload")
+        if isinstance(requested_payload.get("payload"), dict)
+        else requested_payload
+    )
+    return str(
+        requested_payload.get("rule_name")
+        or nested_payload.get("selected_rule")
+        or ""
+    ).strip()

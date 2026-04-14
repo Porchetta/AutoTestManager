@@ -66,3 +66,10 @@
 2026-04-14 14:30:11 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
 2026-04-14 14:34:39 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
 2026-04-14 14:38:19 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-14 15:01:18 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-14 15:09:02 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-14 15:23:25 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-14 15:26:48 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-14 15:43:10 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-14 15:46:32 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-14 15:59:14 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
