@@ -10,9 +10,9 @@ chmod +x dev-setup.sh run-dev.sh
 ```
 
 Default local URLs:
-- API: `http://localhost:8000`
-- Docs: `http://localhost:8000/docs`
-- Health: `http://localhost:8000/health`
+- API: `http://localhost:10223`
+- Docs: `http://localhost:10223/docs`
+- Health: `http://localhost:10223/health`
 
 Default seeded admin:
 - `user_id`: `admin`

@@ -11,7 +11,7 @@ COPY nginx.conf /etc/nginx/http.d/default.conf
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 5173 20216
+EXPOSE 4203
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["dev"]

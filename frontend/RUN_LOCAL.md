@@ -19,7 +19,7 @@ cp .env.example .env
 기본값:
 
 ```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_API_BASE_URL=http://127.0.0.1:10223
 ```
 
 ## 3. 의존성 설치
@@ -38,8 +38,8 @@ npm run dev
 
 ## 5. 접속 주소
 
-- Frontend: `http://127.0.0.1:5173`
-- Backend API: `http://127.0.0.1:8000`
+- Frontend: `http://127.0.0.1:4203`
+- Backend API: `http://127.0.0.1:10223`
 
 ## 6. 종료
 

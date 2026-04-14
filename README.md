@@ -161,9 +161,9 @@ chmod +x dev-setup.sh run-dev.sh
 ```
 
 기본 URL:
-- API: `http://127.0.0.1:8000`
-- Swagger Docs: `http://127.0.0.1:8000/docs`
-- Health: `http://127.0.0.1:8000/health`
+- API: `http://127.0.0.1:10223`
+- Swagger Docs: `http://127.0.0.1:10223/docs`
+- Health: `http://127.0.0.1:10223/health`
 
 기본 관리자 계정:
 - `user_id`: `admin`
@@ -179,10 +179,10 @@ npm run dev
 ```
 
 기본 URL:
-- Frontend: `http://127.0.0.1:5173`
+- Frontend: `http://127.0.0.1:4203`
 
 기본 환경 변수:
-- `VITE_API_BASE_URL=http://127.0.0.1:8000`
+- `VITE_API_BASE_URL=http://127.0.0.1:10223`
 
 ## 데이터 / 파일 저장
 

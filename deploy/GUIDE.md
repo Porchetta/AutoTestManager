@@ -29,11 +29,11 @@
 - 방화벽 포트 개방
   ```bash
   # 개발 모드
-  firewall-cmd --permanent --add-port=20223/tcp   # Backend API
-  firewall-cmd --permanent --add-port=20216/tcp   # Frontend Vite
+  firewall-cmd --permanent --add-port=10223/tcp   # Backend API
+  firewall-cmd --permanent --add-port=4203/tcp   # Frontend Vite
 
-  # 운영 모드 (20216만 필요, backend는 내부 통신)
-  firewall-cmd --permanent --add-port=20216/tcp
+  # 운영 모드 (4203만 필요, backend는 내부 통신)
+  firewall-cmd --permanent --add-port=4203/tcp
 
   firewall-cmd --reload
   ```
@@ -132,9 +132,9 @@ chmod +x deploy/run-dev.sh
 
 | 접속 | URL |
 |---|---|
-| Frontend (Vite HMR) | `http://서버IP:20216` |
-| Backend API | `http://서버IP:20223` |
-| Swagger Docs | `http://서버IP:20223/docs` |
+| Frontend (Vite HMR) | `http://서버IP:4203` |
+| Backend API | `http://서버IP:10223` |
+| Swagger Docs | `http://서버IP:10223/docs` |
 
 **소스 수정 반영 방식:**
 
@@ -158,10 +158,10 @@ chmod +x deploy/run-prod.sh
 
 | 접속 | URL |
 |---|---|
-| 서비스 전체 | `http://서버IP:20216` |
+| 서비스 전체 | `http://서버IP:4203` |
 
 - Frontend: nginx가 정적 파일 서빙 (빌드 포함, 수 분 소요)
-- Backend: 외부 미노출, nginx가 `/api/*` → `atm-backend:8000` 프록시
+- Backend: 외부 미노출, nginx가 `/api/*` → `atm-backend:10223` 프록시
 
 ---
 
@@ -210,8 +210,8 @@ docker logs -f atm-backend
 docker logs -f atm-frontend
 
 # 헬스 체크
-curl http://서버IP:20216/health    # 운영 모드
-curl http://서버IP:20223/health    # 개발 모드
+curl http://서버IP:4203/health    # 운영 모드
+curl http://서버IP:10223/health    # 개발 모드
 
 # 컨테이너 중지
 docker stop atm-backend atm-frontend
