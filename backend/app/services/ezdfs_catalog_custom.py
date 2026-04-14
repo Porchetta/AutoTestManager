@@ -9,8 +9,8 @@ ezDFS catalog custom flow
    backup 디렉토리에서 old version 후보 `.rul` 파일명을 읽는다.
 3. parse_rule_catalog_entries()
    파일명을 `rule_name + version` 형태의 catalog row로 변환한다.
-4. read_rule_source_text()
-   선택한 deployed rule 파일 본문을 읽는다.
+4. read_rule_source_text() / read_rule_source_bytes()
+   선택한 deployed rule 파일 본문을 문자열이나 바이트로 읽는다.
 5. extract_sub_rule_list_from_rule_text() / resolve_recursive_sub_rule_list()
    rule 안에 참조된 sub rule을 직접 추출하고, 필요하면 하위 rule까지 재귀적으로 확장한다.
 """
@@ -181,6 +181,23 @@ def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) 
         raise RuntimeError(error_output or f"Failed to read ezDFS rule file: {file_name}")
 
     return output
+
+
+def read_rule_source_bytes(host: HostConfig, home_dir_path: str, file_name: str) -> bytes:
+    """Read one deployed ezDFS rule file as raw bytes over SFTP."""
+    deployed_dir = _deployed_dir_from_home(home_dir_path)
+    remote_path = f"{deployed_dir.rstrip('/')}/{file_name}"
+    
+    try:
+        with open_limited_ssh_client(host) as client:
+            sftp = client.open_sftp()
+            try:
+                with sftp.open(remote_path, "rb") as remote_file:
+                    return remote_file.read()
+            finally:
+                sftp.close()
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"SFTP byte read failed: {exc}") from exc
 
 
 def extract_sub_rule_list_from_rule_text(rule_text: str, rule_name: str) -> list[str]:

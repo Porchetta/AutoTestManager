@@ -14,6 +14,8 @@ BACKEND_DATA_DIR="${BASE_DIR}/backend/data"
 VERSION="${1:-latest}"
 SERVER_IP="$(hostname -I | awk '{print $1}')"
 BACKEND_API_URL="http://${SERVER_IP}:10223"
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
 
 if [[ ! -f "${BASE_DIR}/backend.env" ]]; then
   echo "ERROR: ${BASE_DIR}/backend.env not found."
@@ -27,10 +29,12 @@ docker rm   atm-backend atm-frontend 2>/dev/null || true
 
 echo ""
 echo "=== Starting backend (dev, --reload) ==="
+echo "    container user: ${HOST_UID}:${HOST_GID}"
 docker run -d \
   --name atm-backend \
   --network atm-net \
   --restart unless-stopped \
+  --user "${HOST_UID}:${HOST_GID}" \
   -p 10223:10223 \
   -v "${BASE_DIR}/backend/app:/app/app" \
   -v "${BACKEND_DATA_DIR}:/data" \

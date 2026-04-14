@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { storeToRefs } from "pinia";
+import { useAuthStore } from "../stores/auth";
 import { useRtdStore } from "../stores/rtd";
 import { useUiStore } from "../stores/ui";
 
+const authStore = useAuthStore();
 const rtdStore = useRtdStore();
 const uiStore = useUiStore();
 
@@ -23,6 +25,7 @@ const {
   rules,
   ruleVersions,
   targetLineOptions,
+  svnUpload,
 } = storeToRefs(rtdStore);
 
 const steps = [
@@ -40,6 +43,16 @@ const ruleCandidateOldVersion = ref("");
 const macroSearchLoading = ref(false);
 const resetFlowLoading = ref(false);
 const executeAllLoading = ref(false);
+const svnUploading = ref(false);
+const svnForm = ref({
+  adUser: "",
+  adPassword: "",
+  svnNo: "",
+});
+
+const svnResultText = ref("");
+const svnResultVisible = ref(false);
+const svnResultLoading = ref(false);
 
 function displayTargetLineName(targetLine) {
   return String(targetLine || "").replace(/_TARGET\b/gi, "");
@@ -113,6 +126,35 @@ function showMonitorSpinner(status) {
   return status === "PENDING" || status === "RUNNING";
 }
 
+async function submitSvnUpload() {
+  if (!svnForm.value.adUser || !svnForm.value.adPassword) {
+    uiStore.setError("AD 계정과 비밀번호를 모두 입력해주세요.");
+    return;
+  }
+
+  svnUploading.value = true;
+  try {
+    const result = await rtdStore.uploadSvn(
+      svnForm.value.adUser,
+      svnForm.value.adPassword,
+    );
+    svnForm.value.svnNo = result?.svn_no || "";
+    svnForm.value.adPassword = "";
+    uiStore.setNotice("SVN Upload가 완료되었습니다.");
+  } finally {
+    svnUploading.value = false;
+  }
+}
+
+function showSvnResult() {
+  svnResultText.value = svnUpload.value?.checkin_output || "SVN Upload 결과가 없습니다.";
+  svnResultVisible.value = true;
+}
+
+function closeSvnResult() {
+  svnResultVisible.value = false;
+}
+
 let pollId = null;
 
 const canProceed = computed(() => {
@@ -165,6 +207,11 @@ const monitorRuleOptions = computed(() => [
 
 onMounted(async () => {
   await rtdStore.loadInitialData();
+  svnForm.value = {
+    adUser: svnUpload.value?.ad_user || authStore.user?.user_id || "",
+    adPassword: "",
+    svnNo: svnUpload.value?.svn_no || "",
+  };
   pollId = window.setInterval(() => {
     rtdStore.refreshTasks();
     rtdStore.refreshMonitor();
@@ -889,34 +936,8 @@ async function resetFlow() {
               </div>
             </div>
 
-            <div
-              v-if="selectedRuleNames.length"
-              class="panel-subcard panel-subcard-fit rtd-major-change-panel"
-            >
-              <div class="task-grid compact-grid ezdfs-rule-board rtd-major-change-board">
-                <div
-                  v-for="ruleName in selectedRuleNames"
-                  :key="`rtd-major-change-${ruleName}`"
-                  class="task-card ezdfs-rule-card"
-                >
-                  <div class="task-head">
-                    <strong>{{ ruleName }}</strong>
-                  </div>
-                  <label class="field ezdfs-major-change-field">
-                    <span>주요 변경 항목</span>
-                    <textarea
-                      rows="3"
-                      :value="majorChangeItems[ruleName] || ''"
-                      placeholder="변경 항목을 입력하세요"
-                      @input="updateMajorChange(ruleName, $event.target.value)"
-                    ></textarea>
-                  </label>
-                </div>
-              </div>
-            </div>
-
             <div class="operation-console">
-              <div class="operation-console-main operation-console-main-full">
+              <div class="operation-console-main">
                 <div class="operation-process-head">
                   <p class="eyebrow">Process all</p>
                 </div>
@@ -979,6 +1000,78 @@ async function resetFlow() {
                       }}</strong>
                     </button>
                   </div>
+                </div>
+              </div>
+              <div class="operation-console-side svn-upload-inline-panel">
+                <div class="operation-process-head">
+                  <p class="eyebrow">SVN Upload</p>
+                </div>
+                <form class="svn-upload-inline-row" @submit.prevent="submitSvnUpload">
+                  <label class="svn-upload-inline-field">
+                    <span class="svn-upload-inline-label">AD 계정</span>
+                    <input
+                      v-model="svnForm.adUser"
+                      type="text"
+                      autocomplete="username"
+                    />
+                  </label>
+                  <label class="svn-upload-inline-field">
+                    <span class="svn-upload-inline-label">PW</span>
+                    <input
+                      v-model="svnForm.adPassword"
+                      type="password"
+                      autocomplete="current-password"
+                    />
+                  </label>
+                  <div class="svn-upload-inline-action">
+                    <button
+                      class="button button-primary"
+                      type="submit"
+                      :disabled="svnUploading || !selectedRuleTargets.length"
+                    >
+                      {{ svnUploading ? "Uploading..." : "Upload" }}
+                    </button>
+                  </div>
+                  <label class="svn-upload-inline-field svn-upload-inline-result">
+                    <span class="svn-upload-inline-label">SVN No.</span>
+                    <input :value="svnForm.svnNo" type="text" readonly />
+                  </label>
+                  <div class="svn-upload-inline-action">
+                    <button
+                      class="button button-ghost"
+                      type="button"
+                      :disabled="!svnForm.svnNo"
+                      @click="showSvnResult"
+                    >
+                      Result
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div
+              v-if="selectedRuleNames.length"
+              class="panel-subcard panel-subcard-fit rtd-major-change-panel"
+            >
+              <div class="task-grid compact-grid ezdfs-rule-board rtd-major-change-board">
+                <div
+                  v-for="ruleName in selectedRuleNames"
+                  :key="`rtd-major-change-${ruleName}`"
+                  class="task-card ezdfs-rule-card"
+                >
+                  <div class="task-head">
+                    <strong>{{ ruleName }}</strong>
+                  </div>
+                  <label class="field ezdfs-major-change-field">
+                    <span>주요 변경 항목</span>
+                    <textarea
+                      rows="3"
+                      :value="majorChangeItems[ruleName] || ''"
+                      placeholder="변경 항목을 입력하세요"
+                      @input="updateMajorChange(ruleName, $event.target.value)"
+                    ></textarea>
+                  </label>
                 </div>
               </div>
             </div>
@@ -1165,4 +1258,16 @@ async function resetFlow() {
       </div>
     </article>
   </section>
+
+  <Teleport to="body">
+    <div v-if="svnResultVisible" class="svn-result-overlay" @click.self="closeSvnResult">
+      <div class="svn-result-dialog">
+        <div class="svn-result-header">
+          <h4>SVN Checkin Result</h4>
+          <button class="button button-ghost" type="button" @click="closeSvnResult">✕</button>
+        </div>
+        <pre class="svn-result-body">{{ svnResultText }}</pre>
+      </div>
+    </div>
+  </Teleport>
 </template>

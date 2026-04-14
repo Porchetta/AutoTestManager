@@ -7,8 +7,8 @@ RTD catalog custom flow
    Remote Dispatcher 디렉토리에서 `.report` 파일명을 읽는다.
 2. parse_rule_catalog_entries()
    파일명을 `rule_name + version` 형태의 catalog row로 변환한다.
-3. read_rule_source_text()
-   사용자가 고른 rule/report 파일 본문을 원격에서 읽는다.
+3. read_rule_source_text() / read_rule_source_bytes()
+   사용자가 고른 rule/report 파일 본문을 원격에서 문자열이나 바이트로 읽는다.
 4. extract_macro_list()
    해당 rule/report 안에 적힌 dependent Macro report 목록을 순서대로 추출한다.
 """
@@ -136,7 +136,7 @@ def read_remote_source_text(host: HostConfig, remote_dir_path: str, file_name: s
     - raises `RuntimeError` when SSH or remote read fails
     """
     command = _build_clean_bash_command(
-        f"cd {shlex.quote(remote_dir_path)} && cat {shlex.quote(file_name)}"
+    f"cd {shlex.quote(remote_dir_path)} && cat {shlex.quote(file_name)}"
     )
 
     try:
@@ -152,6 +152,26 @@ def read_remote_source_text(host: HostConfig, remote_dir_path: str, file_name: s
         raise RuntimeError(error_output or f"Failed to read remote file: {file_name}")
 
     return output
+
+
+def read_rule_source_bytes(host: HostConfig, home_dir_path: str, file_name: str) -> bytes:
+    """Read one RTD source `.report` file as raw bytes via SFTP."""
+    return read_remote_source_bytes(host, home_dir_path, file_name)
+
+
+def read_remote_source_bytes(host: HostConfig, remote_dir_path: str, file_name: str) -> bytes:
+    """Shared remote byte reader for RTD `.report` files via SFTP."""
+    remote_path = f"{remote_dir_path.rstrip('/')}/{file_name}"
+    try:
+        with open_limited_ssh_client(host) as client:
+            sftp = client.open_sftp()
+            try:
+                with sftp.open(remote_path, "rb") as remote_file:
+                    return remote_file.read()
+            finally:
+                sftp.close()
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"SFTP byte read failed: {exc}") from exc
 
 
 def extract_macro_list(host: HostConfig, home_dir_path: str, rule_text: str, rule_name: str) -> list[str]:

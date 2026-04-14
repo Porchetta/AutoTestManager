@@ -8,8 +8,8 @@ ezDFS report custom flow
    task 목록을 받아 Excel 결과서를 생성한다.
 3. _build_ezdfs_report_row()
    각 task를 결과서 row 한 줄로 변환한다.
-4. _read_raw_text() / _extract_command_and_detail()
-   raw result 파일에서 실행 command와 상세 결과를 분리한다.
+4. _read_ezdfs_meta_text() / _read_ezdfs_raw_text()
+   `_meta.txt`에서 실행 command를 읽고, rule 이름으로 저장된 raw txt에서 상세 결과를 읽는다.
 """
 
 import json
@@ -35,7 +35,8 @@ def build_ezdfs_test_report_file(tasks: TestTask | list[TestTask], output_path: 
     Behavior:
     - normalizes the input to a task list
     - writes one row per ezDFS task
-    - reads command/detail text from each raw result file
+    - reads command from `_meta.txt`
+    - reads detail text from the rule-named raw txt file
 
     Customize this function if the offline environment needs a different
     workbook layout or richer parsing of raw outputs.
@@ -88,7 +89,8 @@ def _build_ezdfs_report_row(task: TestTask, requested_payload: dict, payload: di
     Behavior:
     - resolves rule/module/version values from payload
     - filters sub-rule list to the currently selected sub-rules
-    - reads raw output and separates command vs detailed result text
+    - reads command from `_meta.txt`
+    - reads plain test result text from the rule-named raw txt file
     """
     rule_name = payload.get("selected_rule") or requested_payload.get("rule_name", task.target_name)
     major_change_items = payload.get("major_change_items") if isinstance(payload.get("major_change_items"), dict) else {}
@@ -134,12 +136,15 @@ def _read_ezdfs_meta_text(raw_result_path: str | None) -> str:
 
 
 def _read_ezdfs_raw_text(raw_result_path: str | None) -> str:
-    """Read the saved ezDFS `raw.txt` content, if it exists."""
+    """Read the saved ezDFS rule-named raw txt content, if it exists."""
     if not raw_result_path:
         return ""
 
     meta_path = Path(raw_result_path)
-    raw_path = meta_path.parent / "raw.txt"
+    meta_text = _read_ezdfs_meta_text(raw_result_path)
+    rule_name = _extract_ezdfs_rule_name(meta_text)
+    raw_file_name = f"{_sanitize_ezdfs_path_token(rule_name) if rule_name else 'raw'}.txt"
+    raw_path = meta_path.parent / raw_file_name
     if not raw_path.exists():
         return ""
 
@@ -155,6 +160,24 @@ def _extract_ezdfs_command(meta_text: str) -> str:
         if line.startswith("command="):
             return line.split("=", 1)[1].strip()
     return ""
+
+
+def _extract_ezdfs_rule_name(meta_text: str) -> str:
+    """Extract the ezDFS rule name from `_meta.txt` target metadata."""
+    if not meta_text:
+        return ""
+
+    for line in meta_text.splitlines():
+        if line.startswith("target_name="):
+            return line.split("=", 1)[1].strip()
+    return ""
+
+
+def _sanitize_ezdfs_path_token(value: str) -> str:
+    """Sanitize one ezDFS rule name into a safe txt filename token."""
+    normalized = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in str(value or "").strip())
+    normalized = normalized.strip("._")
+    return normalized or "raw"
 
 
 def _style_ezdfs_report_sheet(sheet) -> None:

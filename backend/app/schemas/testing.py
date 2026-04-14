@@ -27,6 +27,7 @@ class RtdSessionPayload(BaseModel):
     target_lines: list[str] = Field(default_factory=list)
     monitor_rule_selection: dict[str, str] = Field(default_factory=dict)
     active_task_ids: list[str] = Field(default_factory=list)
+    svn_upload: dict[str, Any] = Field(default_factory=dict)
 
 
 class EzdfsSessionPayload(BaseModel):
@@ -45,6 +46,7 @@ class EzdfsSessionPayload(BaseModel):
     active_task_id: str | None = None
     latest_status: str | None = None
     catalog_cache: dict[str, Any] = Field(default_factory=dict)
+    svn_upload: dict[str, Any] = Field(default_factory=dict)
 
 
 class RtdActionRequest(BaseModel):
@@ -66,3 +68,8 @@ class EzdfsActionRequest(BaseModel):
 class EzdfsAggregateSummaryRequest(BaseModel):
     module_name: str
     task_ids: list[str] = Field(default_factory=list)
+
+
+class SvnUploadRequest(BaseModel):
+    ad_user: str
+    ad_password: str

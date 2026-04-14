@@ -11,6 +11,7 @@ ezDFS execution custom flow
 4. _run_ezdfs_test_binary()
    원격 `ezDFS_test` 바이너리를 실행한다.
 5. 결과 raw output과 실행 command를 task raw/result 파일 생성에 넘긴다.
+   file_service가 command는 `_meta.txt`, 본문은 rule 이름 txt로 분리 저장한다.
 """
 
 import posixpath
@@ -37,7 +38,7 @@ def execute_ezdfs_test_action(db: Session, task: TestTask, payload: dict[str, An
     - dict[str, str]:
       - message: Monitor/status summary
       - raw_output: Raw stdout text from the remote test binary
-      - test_command: Executed command string for raw/report rendering
+      - test_command: Executed command string. 저장 단계에서 `_meta.txt`에 기록된다.
 
     Behavior:
     - resolves selected module and rule from request/session payload

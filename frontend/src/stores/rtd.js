@@ -23,6 +23,7 @@ export const useRtdStore = defineStore('rtd', () => {
   const tasks = ref([])
   const monitorItems = ref([])
   const copyVisibilityMap = ref({})
+  const svnUpload = ref({})
 
   const businessUnits = ref([])
   const lines = ref([])
@@ -50,6 +51,7 @@ export const useRtdStore = defineStore('rtd', () => {
     target_lines: targetLines.value,
     monitor_rule_selection: monitorRuleSelection.value,
     active_task_ids: tasks.value.map((task) => task.task_id),
+    svn_upload: svnUpload.value,
   }))
 
   async function loadInitialData() {
@@ -183,6 +185,7 @@ export const useRtdStore = defineStore('rtd', () => {
     }
     targetLines.value = session.target_lines || []
     monitorRuleSelection.value = session.monitor_rule_selection || {}
+    svnUpload.value = session.svn_upload || {}
     syncMonitorRuleSelection()
 
     if (selectedBusinessUnit.value) await loadLines()
@@ -199,6 +202,7 @@ export const useRtdStore = defineStore('rtd', () => {
     macroReview.value = { searched: false, old_macros: [], new_macros: [], rule_macro_map: {}, has_diff: false, error: '' }
     targetLines.value = []
     monitorRuleSelection.value = {}
+    svnUpload.value = {}
     lines.value = []
     rules.value = []
     ruleVersions.value = []
@@ -212,6 +216,7 @@ export const useRtdStore = defineStore('rtd', () => {
     macroReview.value = { searched: false, old_macros: [], new_macros: [], rule_macro_map: {}, has_diff: false, error: '' }
     targetLines.value = []
     monitorRuleSelection.value = {}
+    svnUpload.value = {}
     rules.value = []
     ruleVersions.value = []
   }
@@ -421,6 +426,15 @@ export const useRtdStore = defineStore('rtd', () => {
     await saveSession()
   }
 
+  async function uploadSvn(adUser, adPassword) {
+    const data = await apiPost('/api/rtd/svn-upload', {
+      ad_user: adUser,
+      ad_password: adPassword,
+    })
+    svnUpload.value = data.svn_upload || {}
+    return svnUpload.value
+  }
+
   return {
     currentStep,
     selectedBusinessUnit,
@@ -439,6 +453,7 @@ export const useRtdStore = defineStore('rtd', () => {
     rules,
     ruleVersions,
     targetLineOptions,
+    svnUpload,
     loadInitialData,
     loadLines,
     loadRules,
@@ -458,6 +473,7 @@ export const useRtdStore = defineStore('rtd', () => {
     downloadAggregateSummary,
     waitForTaskIds,
     updateMajorChangeItem,
+    uploadSvn,
     resetFlow,
   }
 })

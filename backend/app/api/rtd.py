@@ -16,6 +16,7 @@ from app.schemas.testing import (
     RtdActionRequest,
     RtdMacroCompareRequest,
     RtdSessionPayload,
+    SvnUploadRequest,
 )
 from app.services.catalog_service import (
     compare_macros_by_rule_targets,
@@ -32,6 +33,7 @@ from app.services.file_service import (
     get_rtd_raw_rule_file_map,
 )
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
+from app.services.svn_upload_custom import perform_rtd_svn_upload
 from app.services.task_service import (
     create_test_task,
     ensure_task_owner,
@@ -173,6 +175,16 @@ def delete_session(
 ):
     clear_runtime_session(db, current_user.user_id, TestType.RTD)
     return success_response({"message": "RTD session cleared"})
+
+
+@router.post("/svn-upload")
+def svn_upload(
+    payload: SvnUploadRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    result = perform_rtd_svn_upload(db, current_user, payload.ad_user, payload.ad_password)
+    return success_response({"svn_upload": result})
 
 
 def _create_rtd_tasks(
