@@ -15,10 +15,10 @@ from app.services.ezdfs_catalog_custom import (
     resolve_recursive_sub_rule_list,
 )
 from app.services.rtd_catalog_custom import (
+    extract_macro_list,
     fetch_rule_source_file_names,
     parse_rule_catalog_entries,
     read_rule_source_text,
-    resolve_recursive_macro_list,
 )
 from app.services.session_service import get_runtime_session_payload, upsert_runtime_session
 from app.utils.enums import TestType
@@ -89,8 +89,9 @@ def compare_macros_by_rule_targets(
     if host is None:
         raise ValueError("RTD host config not found")
 
-    old_macro_diff: set[str] = set()
-    new_macro_diff: set[str] = set()
+    old_macro_diff: list[str] = []
+    new_macro_diff: list[str] = []
+    rule_macro_map: dict[str, dict[str, list[str]]] = {}
 
     for item in selected_rule_targets:
         rule_name = item.get("rule_name", "")
@@ -104,17 +105,23 @@ def compare_macros_by_rule_targets(
         if not old_file_name or not new_file_name:
             continue
 
-        old_macros = set(get_macro_list_by_rule_name(db, current_user, line_name, rule_name, old_version))
-        new_macros = set(get_macro_list_by_rule_name(db, current_user, line_name, rule_name, new_version))
-        old_macro_diff.update(sorted(old_macros - new_macros, key=str.lower))
-        new_macro_diff.update(sorted(new_macros - old_macros, key=str.lower))
+        old_macros = get_macro_list_by_rule_name(db, current_user, line_name, rule_name, old_version)
+        new_macros = get_macro_list_by_rule_name(db, current_user, line_name, rule_name, new_version)
+        old_diff_items = _filter_macros_in_order(old_macros, new_macros)
+        new_diff_items = _filter_macros_in_order(new_macros, old_macros)
+        old_macro_diff = _merge_macros_in_order(old_macro_diff, old_diff_items)
+        new_macro_diff = _merge_macros_in_order(new_macro_diff, new_diff_items)
+        rule_macro_map[rule_name] = {
+            "old_macros": old_diff_items,
+            "new_macros": new_diff_items,
+            "all_macros": _merge_macros_in_order(old_diff_items, new_diff_items),
+        }
 
-    old_items = sorted(old_macro_diff, key=str.lower)
-    new_items = sorted(new_macro_diff, key=str.lower)
     return {
-        "old_macros": old_items,
-        "new_macros": new_items,
-        "has_diff": bool(old_items or new_items),
+        "old_macros": old_macro_diff,
+        "new_macros": new_macro_diff,
+        "rule_macro_map": rule_macro_map,
+        "has_diff": bool(old_macro_diff or new_macro_diff),
     }
 
 
@@ -138,7 +145,32 @@ def get_macro_list_by_rule_name(
         raise ValueError("Rule file not found in session cache")
 
     content = read_rule_source_text(host, config.home_dir_path, file_name)
-    return resolve_recursive_macro_list(host, config.home_dir_path, content, rule_name)
+    return extract_macro_list(host, config.home_dir_path, content, rule_name)
+
+
+def _filter_macros_in_order(source_macros: list[str], excluded_macros: list[str]) -> list[str]:
+    excluded = {str(item or "").strip() for item in excluded_macros if str(item or "").strip()}
+    result: list[str] = []
+    seen: set[str] = set()
+    for macro_name in source_macros:
+        normalized = str(macro_name or "").strip()
+        if not normalized or normalized in excluded or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+def _merge_macros_in_order(primary_macros: list[str], secondary_macros: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for macro_name in [*primary_macros, *secondary_macros]:
+        normalized = str(macro_name or "").strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
 
 
 def get_target_lines_by_business_unit(db: Session, business_unit: str, current_user: User) -> list[str]:

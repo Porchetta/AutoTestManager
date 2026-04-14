@@ -16,6 +16,7 @@ from app.services.catalog_service import (
 from app.services.file_service import (
     generate_aggregate_ezdfs_summary_file,
     generate_summary_file,
+    get_ezdfs_raw_content_path,
     get_existing_download_path,
 )
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
@@ -164,7 +165,7 @@ def download_raw(
     db: Session = Depends(get_db),
 ):
     task = ensure_task_owner(db, task_id, current_user.user_id, TestType.EZDFS)
-    path = get_existing_download_path(task, kind="raw")
+    path = get_ezdfs_raw_content_path(task) or get_existing_download_path(task, kind="raw")
     return FileResponse(path=path, filename=path.name, media_type="text/plain")
 
 

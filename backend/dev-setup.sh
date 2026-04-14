@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
 ENV_FILE="$SCRIPT_DIR/.env"
 ENV_EXAMPLE="$SCRIPT_DIR/.env.example"
+DATA_DIR="$SCRIPT_DIR/data"
 UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
 
 if [[ ! -d "$VENV_DIR" ]]; then
@@ -26,7 +27,11 @@ if [[ ! -f "$ENV_FILE" ]]; then
   cp "$ENV_EXAMPLE" "$ENV_FILE"
 fi
 
-mkdir -p "$SCRIPT_DIR/data/results"
+mkdir -p "$DATA_DIR/results/rtd/raw"
+mkdir -p "$DATA_DIR/results/rtd/reports"
+mkdir -p "$DATA_DIR/results/ezdfs/raw"
+mkdir -p "$DATA_DIR/results/ezdfs/reports"
+mkdir -p "$DATA_DIR/logs"
 
 cat <<EOF
 WSL backend development setup is ready.
@@ -37,4 +42,8 @@ Activate:
 Run:
   cd "$SCRIPT_DIR"
   uvicorn app.main:app --reload --host 0.0.0.0 --port 10223
+
+Data:
+  DB      : $DATA_DIR/autotestmanager.db
+  Results : $DATA_DIR/results
 EOF

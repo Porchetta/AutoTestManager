@@ -19,3 +19,5 @@ Thumbs.db
 data/
 backend/data/
 *.db
+
+TestDir

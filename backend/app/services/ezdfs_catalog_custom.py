@@ -1,5 +1,20 @@
 from __future__ import annotations
 
+"""
+ezDFS catalog custom flow
+
+1. fetch_rule_source_file_names()
+   deployed 디렉토리에서 현재 rule `.rul` 파일명을 읽는다.
+2. fetch_backup_rule_source_file_names()
+   backup 디렉토리에서 old version 후보 `.rul` 파일명을 읽는다.
+3. parse_rule_catalog_entries()
+   파일명을 `rule_name + version` 형태의 catalog row로 변환한다.
+4. read_rule_source_text()
+   선택한 deployed rule 파일 본문을 읽는다.
+5. extract_sub_rule_list_from_rule_text() / resolve_recursive_sub_rule_list()
+   rule 안에 참조된 sub rule을 직접 추출하고, 필요하면 하위 rule까지 재귀적으로 확장한다.
+"""
+
 import posixpath
 import re
 import shlex
@@ -10,11 +25,19 @@ from app.services.ssh_runtime import open_limited_ssh_client
 
 def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[str]:
     """
-    Default implementation for ezDFS rule discovery.
+    Discover ezDFS deployed rule filenames from the remote module directory.
 
-    Rules are discovered from `.rul` files under `<home_dir_path>/repository/container/dfsdev/deployed`.
-    Customize this function if the offline environment uses a different
-    directory structure or filtering rule.
+    Input:
+    - host: SSH connection target that owns the ezDFS module files.
+    - home_dir_path: ezDFS module home path from admin config.
+
+    Returns:
+    - list[str]: Bare `.rul` filenames found in the deployed directory.
+
+    Behavior:
+    - resolves `<home_dir_path>/repository/container/dfsdev/deployed`
+    - lists only top-level `.rul` files
+    - ignores hidden files
     """
     deployed_dir = _deployed_dir_from_home(home_dir_path)
     command = _build_clean_bash_command(
@@ -38,10 +61,19 @@ def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[s
 
 def fetch_backup_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[str]:
     """
-    Discover old-version ezDFS rule files from the backup directory.
+    Discover backup ezDFS rule filenames from the remote backup directory.
 
-    Old-version candidates are discovered from `.rul` files under
-    `<home_dir_path>/repository/container/dfsdev/backup`.
+    Input:
+    - host: SSH connection target.
+    - home_dir_path: ezDFS module home path.
+
+    Returns:
+    - list[str]: Bare `.rul` filenames found in the backup directory.
+
+    Behavior:
+    - resolves `<home_dir_path>/repository/container/dfsdev/backup`
+    - lists only top-level `.rul` files
+    - used to find old-version candidates for comparison
     """
     backup_dir = _backup_dir_from_home(home_dir_path)
     command = _build_clean_bash_command(
@@ -65,14 +97,25 @@ def fetch_backup_rule_source_file_names(host: HostConfig, home_dir_path: str) ->
 
 def parse_rule_catalog_entries(file_names: list[str]) -> list[dict[str, str]]:
     """
-    Convert raw file names to ezDFS rule catalog entries.
+    Convert raw ezDFS filenames into catalog rows.
 
-    Current behavior:
-    - expected file name format: `{rule_name}-ver.{version}.{timestamp}.rul`
-    - keep the original file_name
-    - parse `rule_name`
-    - parse `version` including the `ver.` prefix
-    - ignore `timestamp`
+    Input:
+    - file_names: Raw `.rul` filenames from deployed or backup directories.
+
+    Returns:
+    - list[dict[str, str]]: Sorted catalog rows with:
+      - file_name: original filename
+      - rule_name: logical ezDFS rule name
+      - version: parsed version token including `ver.`
+
+    Expected filename format:
+    - `{rule_name}-ver.{version}.{timestamp}.rul`
+
+    Behavior:
+    - preserves the original file name
+    - parses `rule_name`
+    - parses `version`
+    - ignores the trailing timestamp token
     """
     catalog_files: list[dict[str, str]] = []
 
@@ -110,7 +153,15 @@ def parse_rule_catalog_entries(file_names: list[str]) -> list[dict[str, str]]:
 
 def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) -> str:
     """
-    Read one ezDFS rule file from `<home_dir_path>/repository/container/dfsdev/deployed`.
+    Read one deployed ezDFS rule file over SSH.
+
+    Input:
+    - host: SSH connection target.
+    - home_dir_path: ezDFS module home path.
+    - file_name: Bare deployed `.rul` filename.
+
+    Returns:
+    - str: Full rule file text.
     """
     deployed_dir = _deployed_dir_from_home(home_dir_path)
     command = _build_clean_bash_command(
@@ -134,18 +185,21 @@ def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) 
 
 def extract_sub_rule_list_from_rule_text(rule_text: str, rule_name: str) -> list[str]:
     """
-    Default implementation for ezDFS sub-rule extraction.
+    Extract direct sub-rule references from one ezDFS rule text.
 
-    Current behavior:
-    - scan each line for `{rule_name}.rul` references
-    - ignore blank lines
-    - ignore comment-only lines starting with //, #, ;
-    - strip trailing inline comments
-    - return the referenced `rule_name` values without `.rul`
-    - keep first-seen order
+    Input:
+    - rule_text: Full deployed ezDFS rule file text.
+    - rule_name: Current root rule name. Unused for now, but kept so custom
+      parsers can use rule-specific heuristics later.
 
-    Customize this function if the offline environment uses a different
-    sub-rule parsing convention.
+    Returns:
+    - list[str]: Unique sub-rule names in first-seen order, without `.rul`.
+
+    Behavior:
+    - scans each line for `*.rul` references
+    - ignores blank lines and comment-only lines
+    - strips trailing inline comments
+    - removes duplicates while preserving order
     """
     _ = rule_name
     items: list[str] = []
@@ -183,6 +237,26 @@ def resolve_recursive_sub_rule_list(
     catalog_files: list[dict[str, str]],
     preferred_version: str = "",
 ) -> list[str]:
+    """
+    Resolve the full recursive ezDFS sub-rule tree starting from one root rule.
+
+    Input:
+    - host: SSH connection target.
+    - home_dir_path: ezDFS module home path.
+    - root_rule_text: Full text of the selected root rule.
+    - catalog_files: Catalog rows used to map `rule_name -> file_name`.
+    - preferred_version: Optional version preference when multiple rule files
+      exist for the same rule name.
+
+    Returns:
+    - list[str]: Unique sub-rule names discovered through recursive traversal.
+
+    Behavior:
+    - extracts direct sub-rules from the current rule text
+    - resolves the corresponding child file from catalog metadata
+    - reads the child rule file and repeats the same scan
+    - keeps first-seen order across the whole tree
+    """
     resolved: list[str] = []
     seen_rules: set[str] = set()
 
@@ -217,14 +291,17 @@ def resolve_recursive_sub_rule_list(
 
 
 def _build_clean_bash_command(command: str) -> str:
+    """Wrap a shell snippet so it runs in a minimal non-interactive bash."""
     return f"bash --noprofile --norc -lc {shlex.quote(command)}"
 
 
 def _deployed_dir_from_home(home_dir_path: str) -> str:
+    """Resolve the deployed ezDFS directory from one module home path."""
     return posixpath.normpath(posixpath.join(home_dir_path, "repository/container/dfsdev/deployed"))
 
 
 def _backup_dir_from_home(home_dir_path: str) -> str:
+    """Resolve the backup ezDFS directory from one module home path."""
     return posixpath.normpath(posixpath.join(home_dir_path, "repository/container/dfsdev/backup"))
 
 
@@ -233,6 +310,7 @@ def _find_catalog_file_name_by_rule_name(
     rule_name: str,
     preferred_version: str = "",
 ) -> str | None:
+    """Find the most appropriate ezDFS file name for one rule, optionally by version."""
     normalized_rule_name = str(rule_name or "").strip().lower()
     normalized_version = str(preferred_version or "").strip().lower()
 
@@ -255,6 +333,17 @@ def find_latest_backup_version(
     rule_name: str,
     excluded_version: str = "",
 ) -> str:
+    """
+    Pick the newest available backup version for one ezDFS rule.
+
+    Input:
+    - backup_catalog_files: Parsed backup catalog rows.
+    - rule_name: Rule whose old version is needed.
+    - excluded_version: Current deployed version to exclude from candidates.
+
+    Returns:
+    - str: Best matching old version, or empty string when unavailable.
+    """
     normalized_rule_name = str(rule_name or "").strip().lower()
     normalized_excluded_version = str(excluded_version or "").strip().lower()
 

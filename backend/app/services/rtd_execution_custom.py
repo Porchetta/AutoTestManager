@@ -1,5 +1,18 @@
 from __future__ import annotations
 
+"""
+RTD execution custom flow
+
+1. task_service가 RTD COPY / COMPILE / TEST task를 시작한다.
+2. 각 task는 여기의 execute_*_action()으로 들어온다.
+3. execute_copy_action()
+   선택된 rule report와 macro report를 target line으로 복사한다.
+4. execute_compile_action()
+   macro report를 우선순위 역순으로 먼저 컴파일하고, 마지막에 rule report를 컴파일한다.
+5. execute_test_action()
+   선택된 rule들을 같은 line task 안에서 순서대로 테스트하고, rule별 raw section을 남긴다.
+"""
+
 import posixpath
 import shlex
 from typing import Any
@@ -14,16 +27,31 @@ from app.utils.enums import TestType
 
 def execute_copy_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
     """
-    Default implementation for COPY.
+    Copy selected rule reports and dependent macro reports to one target line.
 
-    Current behavior:
+    Input:
+    - db: SQLAlchemy session used to resolve RTD configs and session cache.
+    - task: The RTD COPY task being executed. `task.target_name` is the target line.
+    - payload: Original task request payload. The actual RTD selections are read
+      from `payload["payload"]` when present.
+
+    Returns:
+    - dict[str, str]:
+      - message: Human-readable copy summary for monitor hover text
+      - raw_output: Reserved raw console output, empty for copy
+
+    Behavior:
+    - resolves the selected dev line from runtime/session payload
+    - finds selected rule file names from the cached catalog
+    - collects selected macro file names
+    - copies Dispatcher files and Macro files with remote `cp`
+    - returns copied counts and copied item names
+
+    Current path convention:
     - source rule files: <dev_home_dir>/
     - source macro files: <dev_home_dir>/../Macro/
     - target rule files: <target_home_dir>/
     - target macro files: <target_home_dir>/../Macro/
-
-    Customize this function if the offline environment needs different
-    relative locations or file resolution rules.
     """
     session_payload = _extract_session_payload(payload)
     dev_line_name = session_payload.get("selected_line_name") or payload.get("selected_line_name") or ""
@@ -62,8 +90,12 @@ def execute_copy_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
 
     return {
         "message": (
-            f"Copy completed: dev={source_config.line_name}, target={target_config.line_name}, "
-            f"rules={copied_rule_count}, macros={copied_macro_count}"
+            f"Copy completed\n"
+            f"dev={source_config.line_name}\n"
+            f"target={target_config.line_name}\n"
+            f"rules={copied_rule_count}\n"
+            f"macros={copied_macro_count}"
+            f"{_format_copied_items_summary(rule_file_names, macro_file_names)}"
         ),
         "raw_output": "",
     }
@@ -71,26 +103,52 @@ def execute_copy_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
 
 def execute_compile_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
     """
-    Default implementation for COMPILE.
+    Compile selected macro reports first, then selected rule reports.
+
+    Input:
+    - db: SQLAlchemy session used to resolve RTD config and host info.
+    - task: The RTD COMPILE task. `task.target_name` identifies the line.
+    - payload: Original task request payload or nested RTD session payload.
+
+    Returns:
+    - dict[str, str]:
+      - message: Compile summary shown in the monitor overlay
+      - raw_output: Joined remote command output for debugging/logging
+
+    Behavior:
+    - resolves one target line and host
+    - gets selected rule names and selected macro names
+    - compiles macros first in reverse discovery order
+    - compiles selected rules last
+    - concatenates remote outputs into both summary and raw_output
 
     Intended customization point:
-    - input: line, rule
-    - command example: atm_compiler {Rulename} {Linename}
+    - command example: `atm_compiler {ReportName} {LineName}`
     """
     session_payload = _extract_session_payload(payload)
     config, host = _get_rtd_line_context(db, task.target_name)
     rule_names = _collect_selected_rule_names(session_payload)
+    macro_names = _collect_macro_file_names(session_payload)
     if not rule_names:
         raise ValueError("selected_rule_targets is required for compile action")
 
     outputs: list[str] = []
+    # Higher-priority macros are discovered earlier in the rule source,
+    # so compile starts from the lowest-priority end of that ordered list.
+    for macro_name in reversed(macro_names):
+        command = f"./atm_compiler {shlex.quote(macro_name)} {shlex.quote(config.line_name)}"
+        outputs.append(_run_remote_command(host, config.home_dir_path, command))
     for rule_name in rule_names:
         command = f"./atm_compiler {shlex.quote(rule_name)} {shlex.quote(config.line_name)}"
         outputs.append(_run_remote_command(host, config.home_dir_path, command))
 
     return {
         "message": (
-            f"Compile completed: line={config.line_name}, rules={len(rule_names)}"
+            f"Compile completed\n"
+            f"line={config.line_name}\n"
+            f"rules={len(rule_names)}\n"
+            f"macros={len(macro_names)}"
+            f"{_format_compile_items_summary(rule_names)}"
             f"{_summarize_remote_outputs(outputs)}"
         ),
         "raw_output": "\n\n".join(outputs),
@@ -99,11 +157,28 @@ def execute_compile_action(db: Session, task: TestTask, payload: dict[str, Any])
 
 def execute_test_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
     """
-    Default implementation for TEST / RETEST.
+    Execute RTD tests for the selected rules sequentially on one target line.
+
+    Input:
+    - db: SQLAlchemy session used to resolve RTD config and host info.
+    - task: The RTD TEST/RETEST task. One task represents one target line.
+    - payload: Original task request payload or nested RTD session payload.
+
+    Returns:
+    - dict[str, str]:
+      - message: Test summary shown in the monitor overlay
+      - raw_output: Reserved aggregate raw text, kept for task-level logging
+      - raw_outputs_by_rule: Per-rule raw text used for saved raw txt files
+
+    Behavior:
+    - resolves one target line and host
+    - collects all selected rules from the payload
+    - runs `atm_testscript` once per rule in sequence
+    - returns per-rule raw output so file_service can save `line x rule` txt
+      files directly, without reparsing a large combined file later
 
     Intended customization point:
-    - input: line, rule
-    - command example: atm_testscript {Rulename} {Linename}
+    - command example: `atm_testscript {ReportName} {LineName}`
     """
     session_payload = _extract_session_payload(payload)
     config, host = _get_rtd_line_context(db, task.target_name)
@@ -112,20 +187,22 @@ def execute_test_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
         raise ValueError("selected_rule_targets is required for test action")
 
     outputs: list[str] = []
+    output_by_rule: list[tuple[str, str]] = []
     for rule_name in rule_names:
         command = f"./atm_testscript {shlex.quote(rule_name)} {shlex.quote(config.line_name)}"
-        outputs.append(_run_remote_command(host, config.home_dir_path, command))
+        output = _run_remote_command(host, config.home_dir_path, command)
+        outputs.append(output)
+        output_by_rule.append((rule_name, output))
 
     return {
-        "message": (
-            f"Test completed: line={config.line_name}, rules={len(rule_names)}"
-            f"{_summarize_remote_outputs(outputs)}"
-        ),
-        "raw_output": "\n\n".join(outputs),
+        "message": _format_test_summary_message(config.line_name, rule_names, outputs),
+        "raw_output": _format_test_raw_output(config.line_name, output_by_rule),
+        "raw_outputs_by_rule": {rule_name: output for rule_name, output in output_by_rule},
     }
 
 
 def _extract_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return nested RTD session payload when the API wrapper uses `payload`."""
     nested_payload = payload.get("payload")
     if isinstance(nested_payload, dict):
         return nested_payload
@@ -133,10 +210,12 @@ def _extract_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _macro_dir_from_home(home_dir_path: str) -> str:
+    """Resolve the sibling Macro directory from a Dispatcher home path."""
     return posixpath.normpath(posixpath.join(home_dir_path, "..", "Macro"))
 
 
 def _get_rtd_line_context(db: Session, line_name: str) -> tuple[RtdConfig, HostConfig]:
+    """Resolve one RTD line config and its HostConfig from a line or target name."""
     resolved_line_name = _normalize_target_line_name(line_name)
     config = db.query(RtdConfig).filter(RtdConfig.line_name == resolved_line_name).first()
     if config is None:
@@ -150,6 +229,7 @@ def _get_rtd_line_context(db: Session, line_name: str) -> tuple[RtdConfig, HostC
 
 
 def _normalize_target_line_name(line_name: str) -> str:
+    """Strip `_TARGET` suffix so task names map back to RTD config line names."""
     if line_name.endswith("_TARGET"):
         return line_name[: -len("_TARGET")]
     return line_name
@@ -161,12 +241,23 @@ def _collect_rule_file_names(
     line_name: str,
     session_payload: dict[str, Any],
 ) -> list[str]:
+    """
+    Resolve selected rule/report filenames from the cached RTD catalog.
+
+    Input:
+    - db, user_id: Used to load the cached catalog stored in runtime session.
+    - line_name: Dev line whose catalog cache should be used.
+    - session_payload: RTD payload that contains `selected_rule_targets`.
+
+    Returns:
+    - list[str]: Unique report filenames for both old/new selected versions.
+    """
     runtime_payload = get_runtime_session_payload(db, user_id, TestType.RTD)
     catalog_cache = runtime_payload.get("catalog_cache", {})
     if catalog_cache.get("line_name") != line_name:
         raise ValueError("Rule catalog cache is missing or does not match the selected line")
 
-    selected_rule_targets = session_payload.get("selected_rule_targets", [])
+    selected_rule_targets = _sorted_selected_rule_targets(session_payload)
     rule_files: list[str] = []
     seen: set[str] = set()
     missing_items: list[str] = []
@@ -201,6 +292,14 @@ def _collect_rule_file_names(
 
 
 def _collect_macro_file_names(session_payload: dict[str, Any]) -> list[str]:
+    """
+    Collect selected macro/report names in stable first-seen order.
+
+    Behavior:
+    - prefers explicit `selected_macros`
+    - falls back to macro diff results if explicit selection is absent
+    - removes duplicates and `error`
+    """
     macro_items = session_payload.get("selected_macros", [])
     if not macro_items and "selected_macros" not in session_payload:
         macro_review = session_payload.get("macro_review", {})
@@ -221,9 +320,10 @@ def _collect_macro_file_names(session_payload: dict[str, Any]) -> list[str]:
 
 
 def _collect_selected_rule_names(session_payload: dict[str, Any]) -> list[str]:
+    """Return unique selected rule names sorted by rule name."""
     seen: set[str] = set()
     result: list[str] = []
-    for item in session_payload.get("selected_rule_targets", []):
+    for item in _sorted_selected_rule_targets(session_payload):
         rule_name = str(item.get("rule_name", "")).strip()
         if not rule_name or rule_name in seen:
             continue
@@ -232,7 +332,30 @@ def _collect_selected_rule_names(session_payload: dict[str, Any]) -> list[str]:
     return result
 
 
+def _sorted_selected_rule_targets(session_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Return selected RTD rule targets sorted by rule name.
+
+    This keeps copy / compile / test execution order stable regardless of the
+    order in which the user added rules in the UI.
+    """
+    selected_rule_targets = (
+        session_payload.get("selected_rule_targets", [])
+        if isinstance(session_payload.get("selected_rule_targets"), list)
+        else []
+    )
+    return sorted(
+        selected_rule_targets,
+        key=lambda item: (
+            str(item.get("rule_name", "")).strip().lower(),
+            str(item.get("new_version", "")).strip().lower(),
+            str(item.get("old_version", "")).strip().lower(),
+        ),
+    )
+
+
 def _find_catalog_file_name(catalog_cache: dict[str, Any], rule_name: str, version: str) -> str | None:
+    """Find the report filename for one `rule_name + version` pair in the cached catalog."""
     for item in catalog_cache.get("files", []):
         if item.get("rule_name") == rule_name and item.get("version") == version:
             return item.get("file_name")
@@ -246,6 +369,12 @@ def _copy_files_between_hosts(
     target_dir: str,
     file_names: list[str],
 ) -> int:
+    """
+    Copy multiple files between two RTD directories on the same remote host.
+
+    Returns:
+    - int: Number of files successfully copied.
+    """
     if not file_names:
         return 0
 
@@ -264,6 +393,7 @@ def _copy_files_between_hosts(
 
 
 def _run_remote_command(host: HostConfig, working_dir: str, command: str, timeout: int = 120) -> str:
+    """Run one command inside `working_dir` and return trimmed stdout text."""
     remote_command = _build_clean_bash_command(f"cd {shlex.quote(working_dir)} && {command}")
     try:
         with open_limited_ssh_client(host) as client:
@@ -281,6 +411,7 @@ def _run_remote_command(host: HostConfig, working_dir: str, command: str, timeou
 
 
 def _run_remote_shell_command(host: HostConfig, command: str, timeout: int = 120) -> str:
+    """Run one raw shell command without changing directories and return stdout."""
     remote_command = _build_clean_bash_command(command)
     try:
         with open_limited_ssh_client(host) as client:
@@ -298,6 +429,7 @@ def _run_remote_shell_command(host: HostConfig, command: str, timeout: int = 120
 
 
 def _assert_cp_supported_between_hosts(source_host: HostConfig, target_host: HostConfig) -> None:
+    """Guard the current copy strategy, which only supports same-host `cp`."""
     if source_host.name != target_host.name:
         raise RuntimeError(
             "cp-based copy requires source and target to be accessible from the same host"
@@ -305,34 +437,94 @@ def _assert_cp_supported_between_hosts(source_host: HostConfig, target_host: Hos
 
 
 def _assert_remote_directory_exists(host: HostConfig, directory: str, label: str) -> None:
+    """Validate a remote directory before file copy starts."""
     normalized = posixpath.normpath(directory)
-    _run_remote_shell_command(
-        host,
-        f"test -d {shlex.quote(normalized)}",
-    )
+    try:
+        _run_remote_shell_command(
+            host,
+            f"test -d {shlex.quote(normalized)}",
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(
+            f"{label} directory not found or inaccessible on host={host.name}: {normalized}"
+        ) from exc
 
 
 def _copy_remote_file_with_cp(host: HostConfig, source_path: str, target_path: str) -> None:
+    """Copy one remote file with `cp -f`, validating the source file first."""
     source_normalized = posixpath.normpath(source_path)
     target_normalized = posixpath.normpath(target_path)
-    command = " && ".join(
-        [
+    try:
+        _run_remote_shell_command(
+            host,
             f"test -f {shlex.quote(source_normalized)}",
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(
+            f"source file not found or inaccessible on host={host.name}: {source_normalized}"
+        ) from exc
+
+    try:
+        _run_remote_shell_command(
+            host,
             f"cp -f -- {shlex.quote(source_normalized)} {shlex.quote(target_normalized)}",
-        ]
-    )
-    _run_remote_shell_command(host, command)
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(
+            f"copy failed on host={host.name}: {source_normalized} -> {target_normalized}"
+        ) from exc
 
 
 def _build_clean_bash_command(command: str) -> str:
+    """Wrap shell snippets in a minimal bash invocation for predictable execution."""
     return f"bash --noprofile --norc -lc {shlex.quote(command)}"
 
 
 def _summarize_remote_outputs(outputs: list[str]) -> str:
+    """Compress multiple remote outputs into one short single-line summary string."""
     summarized = [output for output in outputs if output]
     if not summarized:
         return ""
     combined = " | ".join(summarized)
     if len(combined) > 180:
         combined = f"{combined[:177]}..."
-    return f" [{combined}]"
+    return f"\noutput={combined}"
+
+
+def _format_test_summary_message(line_name: str, rule_names: list[str], outputs: list[str]) -> str:
+    """Build the monitor-friendly multiline summary for one RTD test task."""
+    return (
+        f"Test completed\n"
+        f"line={line_name}\n"
+        f"rules={len(rule_names)}"
+        f"{_format_compile_items_summary(rule_names)}"
+        f"{_summarize_remote_outputs(outputs)}"
+    )
+
+
+def _format_test_raw_output(line_name: str, output_by_rule: list[tuple[str, str]]) -> str:
+    """Build a lightweight aggregate raw string for task-level logging/debugging."""
+    sections: list[str] = [f"line={line_name}"]
+    for rule_name, output in output_by_rule:
+        sections.append(f"[{rule_name}]")
+        sections.append(output or "")
+    return "\n".join(sections).strip()
+
+
+def _format_copied_items_summary(rule_file_names: list[str], macro_file_names: list[str]) -> str:
+    """Append copied report names to the COPY monitor summary."""
+    segments: list[str] = []
+    if rule_file_names:
+        segments.append("rules=" + ", ".join(rule_file_names))
+    if macro_file_names:
+        segments.append("macros=" + ", ".join(macro_file_names))
+    if not segments:
+        return ""
+    return "\n" + "\n".join(segments)
+
+
+def _format_compile_items_summary(rule_names: list[str]) -> str:
+    """Append compiled rule names to the COMPILE/TEST monitor summary."""
+    if not rule_names:
+        return ""
+    return "\n" + "rules=" + ", ".join(rule_names)

@@ -14,10 +14,12 @@ export const useRtdStore = defineStore('rtd', () => {
     searched: false,
     old_macros: [],
     new_macros: [],
+    rule_macro_map: {},
     has_diff: false,
     error: '',
   })
   const targetLines = ref([])
+  const monitorRuleSelection = ref({})
   const tasks = ref([])
   const monitorItems = ref([])
   const copyVisibilityMap = ref({})
@@ -46,6 +48,7 @@ export const useRtdStore = defineStore('rtd', () => {
     major_change_items: majorChangeItems.value,
     macro_review: macroReview.value,
     target_lines: targetLines.value,
+    monitor_rule_selection: monitorRuleSelection.value,
     active_task_ids: tasks.value.map((task) => task.task_id),
   }))
 
@@ -107,6 +110,7 @@ export const useRtdStore = defineStore('rtd', () => {
         searched: false,
         old_macros: [],
         new_macros: [],
+        rule_macro_map: {},
         has_diff: false,
         error: '',
       }
@@ -126,6 +130,7 @@ export const useRtdStore = defineStore('rtd', () => {
         searched: true,
         old_macros: result.old_macros || [],
         new_macros: result.new_macros || [],
+        rule_macro_map: result.rule_macro_map || {},
         has_diff: Boolean(result.has_diff),
         error: result.error || '',
       }
@@ -142,6 +147,7 @@ export const useRtdStore = defineStore('rtd', () => {
         searched: true,
         old_macros: [],
         new_macros: [],
+        rule_macro_map: {},
         has_diff: false,
         error: typeof detail === 'string' ? detail : 'Macro 조회에 실패했습니다.',
       }
@@ -171,10 +177,13 @@ export const useRtdStore = defineStore('rtd', () => {
       searched: Boolean(session.macro_review?.searched),
       old_macros: session.macro_review?.old_macros || [],
       new_macros: session.macro_review?.new_macros || [],
+      rule_macro_map: session.macro_review?.rule_macro_map || {},
       has_diff: Boolean(session.macro_review?.has_diff),
       error: session.macro_review?.error || '',
     }
     targetLines.value = session.target_lines || []
+    monitorRuleSelection.value = session.monitor_rule_selection || {}
+    syncMonitorRuleSelection()
 
     if (selectedBusinessUnit.value) await loadLines()
     if (selectedLineName.value) await loadRules()
@@ -187,8 +196,9 @@ export const useRtdStore = defineStore('rtd', () => {
     selectedRuleTargets.value = []
     selectedMacros.value = []
     majorChangeItems.value = {}
-    macroReview.value = { searched: false, old_macros: [], new_macros: [], has_diff: false, error: '' }
+    macroReview.value = { searched: false, old_macros: [], new_macros: [], rule_macro_map: {}, has_diff: false, error: '' }
     targetLines.value = []
+    monitorRuleSelection.value = {}
     lines.value = []
     rules.value = []
     ruleVersions.value = []
@@ -199,13 +209,55 @@ export const useRtdStore = defineStore('rtd', () => {
     selectedRuleTargets.value = []
     selectedMacros.value = []
     majorChangeItems.value = {}
-    macroReview.value = { searched: false, old_macros: [], new_macros: [], has_diff: false, error: '' }
+    macroReview.value = { searched: false, old_macros: [], new_macros: [], rule_macro_map: {}, has_diff: false, error: '' }
     targetLines.value = []
+    monitorRuleSelection.value = {}
     rules.value = []
     ruleVersions.value = []
   }
 
-  async function executeAction(action, overrideTargetLines = null) {
+  function syncMonitorRuleSelection() {
+    const validRules = new Set(selectedRuleTargets.value.map((item) => item.rule_name).filter(Boolean))
+    const nextSelection = {}
+
+    for (const targetLine of targetLines.value) {
+      const selectedRule = monitorRuleSelection.value[targetLine]
+      nextSelection[targetLine] =
+        selectedRule && selectedRule !== '__ALL__' && validRules.has(selectedRule)
+          ? selectedRule
+          : '__ALL__'
+    }
+
+    monitorRuleSelection.value = nextSelection
+  }
+
+  function buildExecutionPayload(selectedRule = '__ALL__') {
+    const normalizedRule = String(selectedRule || '').trim()
+    if (!normalizedRule || normalizedRule === '__ALL__') {
+      return sessionPayload.value
+    }
+
+    const filteredRuleTargets = selectedRuleTargets.value.filter((item) => item.rule_name === normalizedRule)
+    if (!filteredRuleTargets.length) {
+      return {
+        ...sessionPayload.value,
+        selected_rules: [],
+        selected_rule_targets: [],
+        selected_macros: [],
+      }
+    }
+    const allowedMacros = new Set(macroReview.value.rule_macro_map?.[normalizedRule]?.all_macros || [])
+    const filteredMacros = selectedMacros.value.filter((item) => allowedMacros.has(item))
+
+    return {
+      ...sessionPayload.value,
+      selected_rules: filteredRuleTargets.map((item) => item.rule_name),
+      selected_rule_targets: filteredRuleTargets,
+      selected_macros: filteredMacros,
+    }
+  }
+
+  async function executeAction(action, overrideTargetLines = null, selectedRule = '__ALL__') {
     let lines = overrideTargetLines || targetLines.value
     if (action === 'copy') {
       lines = lines.filter((line) => normalizeTargetLineName(line) !== selectedLineName.value)
@@ -218,7 +270,7 @@ export const useRtdStore = defineStore('rtd', () => {
 
     const data = await apiPost(`/api/rtd/actions/${action}`, {
       target_lines: lines,
-      payload: sessionPayload.value,
+      payload: buildExecutionPayload(selectedRule),
     })
     tasks.value = data.items
     if (action === 'copy') {
@@ -276,8 +328,13 @@ export const useRtdStore = defineStore('rtd', () => {
     await refreshTasks()
   }
 
-  async function downloadRaw(taskId) {
-    await downloadFile(`/api/rtd/results/${taskId}/raw`, `rtd_${taskId}_raw.txt`)
+  async function downloadRaw(taskId, selectedRule = '__ALL__') {
+    const isSingleRule = selectedRule && selectedRule !== '__ALL__'
+    await downloadFile(`/api/rtd/results/${taskId}/raw`, isSingleRule ? `rtd_${taskId}_${selectedRule}.txt` : `rtd_${taskId}_raw.zip`, {
+      params: {
+        selected_rule: selectedRule,
+      },
+    })
   }
 
   async function downloadSummary(taskId) {
@@ -338,10 +395,12 @@ export const useRtdStore = defineStore('rtd', () => {
       searched: false,
       old_macros: [],
       new_macros: [],
+      rule_macro_map: {},
       has_diff: false,
       error: '',
     }
     targetLines.value = []
+    monitorRuleSelection.value = {}
     monitorItems.value = []
     copyVisibilityMap.value = {}
     lines.value = []
@@ -371,6 +430,7 @@ export const useRtdStore = defineStore('rtd', () => {
     majorChangeItems,
     macroReview,
     targetLines,
+    monitorRuleSelection,
     selectedRuleTargets,
     tasks,
     monitorItems,
@@ -388,6 +448,7 @@ export const useRtdStore = defineStore('rtd', () => {
     restoreSession,
     resetAfterBusinessUnit,
     resetAfterLine,
+    syncMonitorRuleSelection,
     executeAction,
     refreshTasks,
     refreshMonitor,

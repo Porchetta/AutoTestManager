@@ -16,6 +16,7 @@ const {
   majorChangeItems,
   macroReview,
   targetLines,
+  monitorRuleSelection,
   monitorItems,
   businessUnits,
   lines,
@@ -94,6 +95,12 @@ function monitorFailureReason(action) {
   return action.message && action.message !== "-" ? action.message : "";
 }
 
+function monitorActionDetail(action) {
+  if (!action || !action.message || action.message === "-") return "";
+  if (action.status === "FAIL" || action.status === "DONE") return action.message;
+  return "";
+}
+
 function monitorActionClass(status) {
   if (status === "DONE") return "is-success";
   if (status === "FAIL") return "is-fail";
@@ -146,6 +153,14 @@ const selectedRuleNames = computed(() => [
   ...new Set(
     selectedRuleTargets.value.map((item) => item.rule_name).filter(Boolean),
   ),
+]);
+
+const monitorRuleOptions = computed(() => [
+  { value: "__ALL__", label: "ALL" },
+  ...selectedRuleNames.value.map((ruleName) => ({
+    value: ruleName,
+    label: ruleName,
+  })),
 ]);
 
 onMounted(async () => {
@@ -237,6 +252,7 @@ async function addRuleTarget() {
     error: "",
   };
   targetLines.value = [];
+  rtdStore.syncMonitorRuleSelection();
   await rtdStore.saveSession();
 
   ruleCandidateNewVersion.value = "";
@@ -257,6 +273,7 @@ async function removeRuleTarget(index) {
     error: "",
   };
   targetLines.value = [];
+  rtdStore.syncMonitorRuleSelection();
   await rtdStore.saveSession();
 }
 
@@ -454,17 +471,29 @@ async function executeAllProcess() {
 
 async function selectAllTargets() {
   targetLines.value = [...targetLineOptions.value];
+  rtdStore.syncMonitorRuleSelection();
   await rtdStore.saveSession();
   await rtdStore.refreshMonitor();
 }
 
 async function clearAllTargets() {
   targetLines.value = [];
+  rtdStore.syncMonitorRuleSelection();
   await rtdStore.saveSession();
   await rtdStore.refreshMonitor();
 }
 
 async function updateTargetSelection() {
+  rtdStore.syncMonitorRuleSelection();
+  await rtdStore.saveSession();
+  await rtdStore.refreshMonitor();
+}
+
+async function updateMonitorRuleSelection(targetName, selectedRule) {
+  monitorRuleSelection.value = {
+    ...monitorRuleSelection.value,
+    [targetName]: selectedRule || "__ALL__",
+  };
   await rtdStore.saveSession();
   await rtdStore.refreshMonitor();
 }
@@ -474,7 +503,8 @@ async function runSingleAction(action, targetName) {
     uiStore.setNotice("개발 라인은 복사 대상에서 제외됩니다.");
     return;
   }
-  const items = await rtdStore.executeAction(action, [targetName]);
+  const selectedRule = monitorRuleSelection.value[targetName] || "__ALL__";
+  const items = await rtdStore.executeAction(action, [targetName], selectedRule);
   if (action === "copy" && !items.length) {
     uiStore.setNotice("개발 라인은 복사 대상에서 제외되었습니다.");
     return;
@@ -859,8 +889,11 @@ async function resetFlow() {
               </div>
             </div>
 
-            <div v-if="selectedRuleNames.length" class="panel-subcard panel-subcard-fit">
-              <div class="task-grid compact-grid ezdfs-rule-board">
+            <div
+              v-if="selectedRuleNames.length"
+              class="panel-subcard panel-subcard-fit rtd-major-change-panel"
+            >
+              <div class="task-grid compact-grid ezdfs-rule-board rtd-major-change-board">
                 <div
                   v-for="ruleName in selectedRuleNames"
                   :key="`rtd-major-change-${ruleName}`"
@@ -1002,9 +1035,31 @@ async function resetFlow() {
             <strong class="monitor-line-name">{{
               displayTargetLineName(item.target_name)
             }}</strong>
-            <span class="monitor-status-chip">{{
-              monitorStatusChip(item)
-            }}</span>
+            <div class="monitor-header-meta">
+              <label class="monitor-rule-select">
+                <span class="sr-only">실행 대상 Rule 선택</span>
+                <select
+                  :value="monitorRuleSelection[item.target_name] || '__ALL__'"
+                  @change="
+                    updateMonitorRuleSelection(
+                      item.target_name,
+                      $event.target.value,
+                    )
+                  "
+                >
+                  <option
+                    v-for="option in monitorRuleOptions"
+                    :key="`${item.target_name}-${option.value}`"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+              <span class="monitor-status-chip">{{
+                monitorStatusChip(item)
+              }}</span>
+            </div>
           </div>
 
           <div class="monitor-action-grid">
@@ -1014,7 +1069,7 @@ async function resetFlow() {
               :title="
                 isDevLineTarget(item.target_name)
                   ? '개발 라인은 복사 대상이 아닙니다.'
-                  : monitorFailureReason(item.copy)
+                  : monitorActionDetail(item.copy)
               "
               type="button"
               :disabled="isDevLineTarget(item.target_name)"
@@ -1041,7 +1096,7 @@ async function resetFlow() {
             <button
               class="monitor-action-button"
               :class="monitorActionClass(item.compile.status)"
-              :title="monitorFailureReason(item.compile)"
+              :title="monitorActionDetail(item.compile)"
               type="button"
               @click="runSingleAction('compile', item.target_name)"
             >
@@ -1066,7 +1121,7 @@ async function resetFlow() {
             <button
               class="monitor-action-button"
               :class="monitorActionClass(item.test.status)"
-              :title="monitorFailureReason(item.test)"
+              :title="monitorActionDetail(item.test)"
               type="button"
               @click="runSingleAction('test', item.target_name)"
             >
@@ -1093,7 +1148,7 @@ async function resetFlow() {
               :class="{ 'is-disabled': !item.raw_download.enabled }"
               :disabled="!item.raw_download.enabled"
               type="button"
-              @click="rtdStore.downloadRaw(item.raw_download.task_id)"
+              @click="rtdStore.downloadRaw(item.raw_download.task_id, item.selected_rule)"
             >
               <strong>Raw Data</strong>
               <span class="monitor-action-meta">

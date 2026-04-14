@@ -831,6 +831,25 @@ select option {
   width: min(100%, 280px);
 }
 
+.rtd-major-change-panel {
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.rtd-major-change-board {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: start;
+  width: min(100%, 860px);
+}
+
+.rtd-major-change-board .ezdfs-rule-card {
+  flex: 0 1 280px;
+  width: 280px;
+}
+
 .ezdfs-rule-card {
   padding: 12px 12px;
   gap: 8px;
@@ -1921,10 +1940,33 @@ select option {
   gap: 10px;
 }
 
+.monitor-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .monitor-line-name {
   font-size: 0.94rem;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+.monitor-rule-select {
+  min-width: 0;
+}
+
+.monitor-rule-select select {
+  min-height: 30px;
+  max-width: 156px;
+  padding: 4px 30px 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted-strong);
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
 .monitor-status-chip {
@@ -2042,6 +2084,18 @@ select option {
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   animation: spin 0.9s linear infinite;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @keyframes spin {

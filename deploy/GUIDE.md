@@ -10,7 +10,7 @@
 
 - **Docker 이미지**: 사외에서 빌드 → tar.gz로 반입
 - **소스 코드**: git repo로 사내 반입 (이미지에 미포함, 컨테이너에 볼륨 마운트)
-- **데이터 (DB, 결과 파일)**: 사내 서버 `/opt/atm/data/` 에 영구 보존
+- **데이터 (DB, 결과 파일)**: 사내 서버 `/opt/atm/backend/data/` 에 영구 보존
 
 ---
 
@@ -217,7 +217,7 @@ curl http://서버IP:10223/health    # 개발 모드
 docker stop atm-backend atm-frontend
 
 # 데이터 보존 확인 (컨테이너 삭제 후에도 유지)
-ls /opt/atm/data/
+ls /opt/atm/backend/data/
 ```
 
 ---
@@ -227,13 +227,13 @@ ls /opt/atm/data/
 ```
 /opt/atm/
 ├── backend/
-│   └── app/              ← 컨테이너 마운트 (소스)
+│   ├── app/              ← 컨테이너 마운트 (소스)
+│   └── data/             ← 컨테이너 마운트 (영구 보존)
+│       ├── autotestmanager.db
+│       ├── results/
+│       └── logs/
 ├── frontend/
 │   └── src/              ← 컨테이너 마운트 (소스)
-├── data/                 ← 컨테이너 마운트 (영구 보존)
-│   ├── autotestmanager.db
-│   ├── results/
-│   └── logs/
 ├── backend.env           ← 환경 변수 (git 미포함, 서버에서 직접 관리)
 └── deploy/
     ├── run-dev.sh

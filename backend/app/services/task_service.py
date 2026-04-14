@@ -22,6 +22,8 @@ from app.utils.enums import ActionType, TaskStatus, TestType, TaskStep
 
 _EZDFS_QUEUE_CONDITION = threading.Condition()
 _EZDFS_MODULE_QUEUES: dict[str, list[str]] = {}
+_RTD_QUEUE_CONDITION = threading.Condition()
+_RTD_LINE_QUEUES: dict[str, list[str]] = {}
 
 
 def _now() -> datetime:
@@ -37,7 +39,7 @@ def create_test_task(
     requested_payload: dict,
     current_step: TaskStep,
 ) -> TestTask:
-    duplicate = (
+    duplicate_candidates = (
         db.query(TestTask)
         .filter(
             TestTask.user_id == owner_user_id,
@@ -46,7 +48,15 @@ def create_test_task(
             TestTask.target_name == target_name,
             TestTask.status.in_([TaskStatus.PENDING.value, TaskStatus.RUNNING.value]),
         )
-        .first()
+        .all()
+    )
+    duplicate = next(
+        (
+            candidate
+            for candidate in duplicate_candidates
+            if _is_same_task_scope(test_type, action_type, requested_payload, candidate.requested_payload_json)
+        ),
+        None,
     )
     if duplicate:
         raise HTTPException(status_code=409, detail="A task is already running for the same target")
@@ -69,6 +79,49 @@ def create_test_task(
     return task
 
 
+def _is_same_task_scope(
+    test_type: TestType,
+    action_type: ActionType,
+    requested_payload: dict,
+    existing_requested_payload_json: str,
+) -> bool:
+    if test_type != TestType.RTD or action_type not in {ActionType.TEST, ActionType.RETEST}:
+        return True
+
+    try:
+        existing_requested_payload = json.loads(existing_requested_payload_json or "{}")
+    except Exception:  # noqa: BLE001
+        return False
+
+    return _extract_rtd_primary_rule_name(requested_payload) == _extract_rtd_primary_rule_name(existing_requested_payload)
+
+
+def _extract_rtd_primary_rule_name(requested_payload: dict) -> str:
+    nested_payload = (
+        requested_payload.get("payload")
+        if isinstance(requested_payload.get("payload"), dict)
+        else requested_payload
+    )
+    selected_rule = str(
+        nested_payload.get("selected_rule")
+        or requested_payload.get("rule_name")
+        or ""
+    ).strip()
+    if selected_rule:
+        return selected_rule
+
+    selected_rule_targets = (
+        nested_payload.get("selected_rule_targets")
+        if isinstance(nested_payload.get("selected_rule_targets"), list)
+        else []
+    )
+    for item in selected_rule_targets:
+        rule_name = str(item.get("rule_name", "")).strip()
+        if rule_name:
+            return rule_name
+    return ""
+
+
 def queue_mock_task(background_tasks: BackgroundTasks, task_id: str, step: TaskStep) -> None:
     background_tasks.add_task(_start_mock_task_thread, task_id, step.value)
 
@@ -87,12 +140,19 @@ def run_mock_task(task_id: str, step: str) -> None:
     db = SessionLocal()
     ezdfs_module_name = ""
     ezdfs_queue_acquired = False
+    rtd_queue_key = ""
+    rtd_queue_acquired = False
     try:
         task = db.query(TestTask).filter(TestTask.task_id == task_id).first()
         if task is None:
             return
 
         payload = json.loads(task.requested_payload_json or "{}")
+        if _requires_rtd_line_queue(task):
+            rtd_queue_key = _build_rtd_queue_key(task.user_id, task.target_name)
+            _enter_rtd_line_queue(db, task, rtd_queue_key)
+            _wait_for_rtd_line_turn(task.task_id, rtd_queue_key)
+            rtd_queue_acquired = True
         if _requires_ezdfs_module_queue(task, payload):
             ezdfs_module_name = _extract_ezdfs_module_name(payload)
             _enter_ezdfs_module_queue(db, task, ezdfs_module_name)
@@ -126,7 +186,12 @@ def run_mock_task(task_id: str, step: str) -> None:
                 test_command = execution_result.get("test_command") or ""
                 if test_command:
                     raw_output = "\n".join(filter(None, [f"command={test_command}", raw_output]))
-                generate_raw_file(db, task, raw_output)
+                generate_raw_file(
+                    db,
+                    task,
+                    raw_output,
+                    execution_result.get("raw_outputs_by_rule"),
+                )
         except Exception as exc:  # noqa: BLE001
             task.status = TaskStatus.FAIL.value
             task.current_step = step
@@ -135,6 +200,8 @@ def run_mock_task(task_id: str, step: str) -> None:
             db.add(task)
             db.commit()
     finally:
+        if rtd_queue_acquired and rtd_queue_key:
+            _leave_rtd_line_queue(task_id, rtd_queue_key)
         if ezdfs_queue_acquired and ezdfs_module_name:
             _leave_ezdfs_module_queue(task_id, ezdfs_module_name)
         db.close()
@@ -166,7 +233,12 @@ def ensure_task_owner(
     return task
 
 
-def list_rtd_target_monitor_items(db: Session, target_names: list[str], current_user_id: str) -> list[dict]:
+def list_rtd_target_monitor_items(
+    db: Session,
+    target_names: list[str],
+    current_user_id: str,
+    rule_selection_map: dict[str, str] | None = None,
+) -> list[dict]:
     normalized_targets = list(dict.fromkeys(target_names))
     if not normalized_targets:
         return []
@@ -190,7 +262,16 @@ def list_rtd_target_monitor_items(db: Session, target_names: list[str], current_
     items: list[dict] = []
     for target_name in normalized_targets:
         target_tasks = [task for task in tasks if task.target_name == target_name]
-        items.append(_build_rtd_target_monitor_item(target_name, target_tasks, current_user_id, user_name_map))
+        selected_rule = (rule_selection_map or {}).get(target_name, "__ALL__")
+        items.append(
+            _build_rtd_target_monitor_item(
+                target_name,
+                target_tasks,
+                current_user_id,
+                user_name_map,
+                selected_rule,
+            )
+        )
     return items
 
 
@@ -238,6 +319,15 @@ def _requires_ezdfs_module_queue(task: TestTask, payload: dict) -> bool:
         and task.action_type in {ActionType.TEST.value, ActionType.RETEST.value}
         and bool(_extract_ezdfs_module_name(payload))
     )
+
+
+def _requires_rtd_line_queue(task: TestTask) -> bool:
+    return task.test_type == TestType.RTD.value and task.action_type in {
+        ActionType.COPY.value,
+        ActionType.COMPILE.value,
+        ActionType.TEST.value,
+        ActionType.RETEST.value,
+    }
 
 
 def _extract_ezdfs_module_name(payload: dict) -> str:
@@ -325,6 +415,104 @@ def _refresh_ezdfs_wait_message(task_id: str, module_name: str, current_head_tas
         db.close()
 
 
+def _enter_rtd_line_queue(db: Session, task: TestTask, queue_key: str) -> None:
+    with _RTD_QUEUE_CONDITION:
+        queue = _RTD_LINE_QUEUES.setdefault(queue_key, [])
+        if task.task_id not in queue:
+            queue.append(task.task_id)
+        position = queue.index(task.task_id) + 1
+        current_head_task_id = queue[0] if queue else ""
+
+    task.status = TaskStatus.PENDING.value
+    task.current_step = task.current_step or TaskStep.TESTING.value
+    task.message = (
+        f"Queue: {_get_rtd_task_display_name(db, current_head_task_id)} ({position})"
+        if position > 1
+        else f"Queued: {_get_rtd_task_display_name(db, task.task_id)}"
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+
+def _wait_for_rtd_line_turn(task_id: str, queue_key: str) -> None:
+    with _RTD_QUEUE_CONDITION:
+        while True:
+            queue = _RTD_LINE_QUEUES.get(queue_key, [])
+            if queue and queue[0] == task_id:
+                return
+            _refresh_rtd_wait_message(task_id, queue_key, queue[0] if queue else "")
+            _RTD_QUEUE_CONDITION.wait(timeout=1.0)
+
+
+def _leave_rtd_line_queue(task_id: str, queue_key: str) -> None:
+    with _RTD_QUEUE_CONDITION:
+        queue = _RTD_LINE_QUEUES.get(queue_key, [])
+        if task_id in queue:
+            queue.remove(task_id)
+        if not queue:
+            _RTD_LINE_QUEUES.pop(queue_key, None)
+        _RTD_QUEUE_CONDITION.notify_all()
+
+
+def _refresh_rtd_wait_message(task_id: str, queue_key: str, current_head_task_id: str) -> None:
+    db = SessionLocal()
+    try:
+        task = db.query(TestTask).filter(TestTask.task_id == task_id).first()
+        if task is None or task.status != TaskStatus.PENDING.value:
+            return
+
+        current_label = _get_rtd_task_display_name(db, current_head_task_id) or _normalize_rtd_target_name(task.target_name)
+        with _RTD_QUEUE_CONDITION:
+            queue = _RTD_LINE_QUEUES.get(queue_key, [])
+            position = queue.index(task_id) + 1 if task_id in queue else 0
+
+        next_message = f"Queue: {current_label} ({position})" if position > 1 else f"Queued: {_get_rtd_task_display_name(db, task_id)}"
+        if task.message == next_message:
+            return
+
+        task.message = next_message
+        db.add(task)
+        db.commit()
+    finally:
+        db.close()
+
+
+def _build_rtd_queue_key(user_id: str, target_name: str) -> str:
+    return f"{user_id}::{_normalize_rtd_target_name(target_name)}"
+
+
+def _normalize_rtd_target_name(target_name: str) -> str:
+    normalized = str(target_name or "").strip()
+    if normalized.endswith("_TARGET"):
+        return normalized[: -len("_TARGET")]
+    return normalized
+
+
+def _get_rtd_task_display_name(db: Session, task_id: str) -> str:
+    task = db.query(TestTask).filter(TestTask.task_id == task_id).first()
+    if task is None:
+        return ""
+
+    action_label = "테스트" if task.action_type == ActionType.RETEST.value else {
+        ActionType.COPY.value: "복사",
+        ActionType.COMPILE.value: "컴파일",
+        ActionType.TEST.value: "테스트",
+    }.get(task.action_type, task.action_type)
+    rule_name = _extract_rtd_task_primary_rule_name(task)
+    if rule_name:
+        return f"{action_label} {rule_name}"
+    return f"{action_label} {_normalize_rtd_target_name(task.target_name)}"
+
+
+def _extract_rtd_task_primary_rule_name(task: TestTask) -> str:
+    try:
+        requested_payload = json.loads(task.requested_payload_json or "{}")
+    except Exception:  # noqa: BLE001
+        return ""
+    return _extract_rtd_primary_rule_name(requested_payload)
+
+
 def _get_ezdfs_task_rule_name(db: Session, task_id: str) -> str:
     task = db.query(TestTask).filter(TestTask.task_id == task_id).first()
     if task is None:
@@ -343,26 +531,29 @@ def _build_rtd_target_monitor_item(
     target_tasks: list[TestTask],
     current_user_id: str,
     user_name_map: dict[str, str],
+    selected_rule: str = "__ALL__",
 ) -> dict:
-    active_task = next((task for task in target_tasks if task.status == TaskStatus.RUNNING.value), None)
+    filtered_tasks = _filter_rtd_tasks_by_selected_rule(target_tasks, selected_rule)
+
+    active_task = next((task for task in filtered_tasks if task.status == TaskStatus.RUNNING.value), None)
     if active_task is None:
-        active_task = next((task for task in target_tasks if task.status == TaskStatus.PENDING.value), None)
+        active_task = next((task for task in filtered_tasks if task.status == TaskStatus.PENDING.value), None)
 
     latest_copy_task = _select_latest_task_for_actions(
-        target_tasks,
+        filtered_tasks,
         [ActionType.COPY.value],
         include_finished=True,
     )
-    latest_compile_task = _select_latest_task_for_actions(target_tasks, [ActionType.COMPILE.value])
+    latest_compile_task = _select_latest_task_for_actions(filtered_tasks, [ActionType.COMPILE.value])
     latest_test_task = _select_latest_task_for_actions(
-        target_tasks,
+        filtered_tasks,
         [ActionType.TEST.value, ActionType.RETEST.value],
     )
 
     latest_user_test_task = next(
         (
             task
-            for task in target_tasks
+            for task in filtered_tasks
             if task.user_id == current_user_id
             and task.action_type in {ActionType.TEST.value, ActionType.RETEST.value}
         ),
@@ -381,12 +572,49 @@ def _build_rtd_target_monitor_item(
         "copy": _serialize_monitor_action(latest_copy_task, "복사"),
         "compile": _serialize_monitor_action(latest_compile_task, "컴파일"),
         "test": _serialize_monitor_action(latest_test_task, "테스트"),
+        "selected_rule": selected_rule,
         "raw_download": {
             "enabled": bool(raw_download_task),
             "task_id": raw_download_task.task_id if raw_download_task else None,
             "label": "다운로드 가능" if raw_download_task else "없음",
         },
     }
+
+
+def _filter_rtd_tasks_by_selected_rule(target_tasks: list[TestTask], selected_rule: str) -> list[TestTask]:
+    normalized_selected_rule = str(selected_rule or "").strip()
+    if not normalized_selected_rule or normalized_selected_rule == "__ALL__":
+        return target_tasks
+
+    filtered: list[TestTask] = []
+    for task in target_tasks:
+        rule_names = _extract_rtd_task_rule_names(task)
+        if normalized_selected_rule in rule_names:
+            filtered.append(task)
+    return filtered
+
+
+def _extract_rtd_task_rule_names(task: TestTask) -> set[str]:
+    try:
+        requested_payload = json.loads(task.requested_payload_json or "{}")
+    except Exception:  # noqa: BLE001
+        return set()
+
+    nested_payload = (
+        requested_payload.get("payload")
+        if isinstance(requested_payload.get("payload"), dict)
+        else requested_payload
+    )
+    selected_rule_targets = nested_payload.get("selected_rule_targets", [])
+    rule_names = {
+        str(item.get("rule_name", "")).strip()
+        for item in selected_rule_targets
+        if str(item.get("rule_name", "")).strip()
+    }
+    fallback_rule_name = str(requested_payload.get("rule_name", "")).strip()
+    if fallback_rule_name:
+        rule_names.add(fallback_rule_name)
+    return rule_names
 
 
 def _build_current_status_text(task: TestTask | None, user_name_map: dict[str, str]) -> str:

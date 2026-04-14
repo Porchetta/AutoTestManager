@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import io
+import re
+import zipfile
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
+from starlette.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -24,6 +29,7 @@ from app.services.file_service import (
     generate_aggregate_rtd_summary_file,
     generate_summary_file,
     get_existing_download_path,
+    get_rtd_raw_rule_file_map,
 )
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
 from app.services.task_service import (
@@ -41,6 +47,28 @@ router = APIRouter(prefix="/api/rtd", tags=["rtd"])
 
 def _normalize_target_line_name(line_name: str) -> str:
     return str(line_name or "").replace("_TARGET", "")
+
+
+def _sanitize_download_token(value: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "").strip())
+    return sanitized.strip("._-") or "report"
+
+
+def _build_rtd_raw_txt_name(task, rule_name: str) -> str:
+    line_name = _sanitize_download_token(_normalize_target_line_name(task.target_name))
+    return f"{line_name}-{_sanitize_download_token(rule_name)}.txt"
+
+
+def _build_rtd_task_requests(
+    payload: RtdActionRequest,
+    action_type: ActionType,
+) -> list[tuple[str, dict]]:
+    request_payload = payload.model_dump()
+    sorted_target_lines = sorted(
+        payload.target_lines,
+        key=lambda item: _normalize_target_line_name(str(item or "")).lower(),
+    )
+    return [(target_line, request_payload) for target_line in sorted_target_lines]
 
 
 @router.get("/business-units")
@@ -157,6 +185,8 @@ def _create_rtd_tasks(
 ):
     if not payload.target_lines:
         raise HTTPException(status_code=422, detail="target_lines is required")
+    if action_type in {ActionType.TEST, ActionType.RETEST} and not payload.payload.get("selected_rule_targets"):
+        raise HTTPException(status_code=422, detail="selected_rule_targets is required")
 
     target_lines = payload.target_lines
     if action_type == ActionType.COPY:
@@ -170,15 +200,22 @@ def _create_rtd_tasks(
     if not target_lines:
         return success_response({"items": []})
 
+    task_requests = _build_rtd_task_requests(
+        RtdActionRequest(target_lines=target_lines, payload=payload.payload),
+        action_type,
+    )
+    if action_type in {ActionType.TEST, ActionType.RETEST} and not task_requests:
+        raise HTTPException(status_code=422, detail="selected_rule_targets is required")
+
     items = []
-    for target_line in target_lines:
+    for target_line, requested_payload in task_requests:
         task = create_test_task(
             db=db,
             test_type=TestType.RTD,
             action_type=action_type,
             owner_user_id=current_user.user_id,
             target_name=target_line,
-            requested_payload=payload.model_dump(),
+            requested_payload=requested_payload,
             current_step=step,
         )
         queue_mock_task(background_tasks, task.task_id, step)
@@ -243,7 +280,13 @@ def monitor_status(
     db: Session = Depends(get_db),
 ):
     target_items = [item.strip() for item in target_lines.split(",") if item.strip()]
-    items = list_rtd_target_monitor_items(db, target_items, current_user.user_id)
+    session_payload = get_runtime_session_payload(db, current_user.user_id, TestType.RTD)
+    items = list_rtd_target_monitor_items(
+        db,
+        target_items,
+        current_user.user_id,
+        session_payload.get("monitor_rule_selection", {}),
+    )
     return success_response({"items": items})
 
 
@@ -260,12 +303,42 @@ def get_status(
 @router.get("/results/{task_id}/raw")
 def download_raw(
     task_id: str,
+    selected_rule: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     task = ensure_task_owner(db, task_id, current_user.user_id, TestType.RTD)
-    path = get_existing_download_path(task, kind="raw")
-    return FileResponse(path=path, filename=path.name, media_type="text/plain")
+    sections = {
+        rule_name: file_path.read_text(encoding="utf-8", errors="ignore")
+        for rule_name, file_path in get_rtd_raw_rule_file_map(task).items()
+    }
+    normalized_rule = str(selected_rule or "").strip()
+
+    if not sections:
+        raise HTTPException(status_code=404, detail="Rule raw data files not found for this RTD task")
+
+    if normalized_rule and normalized_rule != "__ALL__":
+        content = sections.get(normalized_rule)
+        if content is None:
+            raise HTTPException(status_code=404, detail="Selected rule raw data not found")
+        filename = _build_rtd_raw_txt_name(task, normalized_rule)
+        return Response(
+            content=content,
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for rule_name, content in sections.items():
+            archive.writestr(_build_rtd_raw_txt_name(task, rule_name), content)
+    zip_buffer.seek(0)
+    zip_name = f"{_sanitize_download_token(_normalize_target_line_name(task.target_name))}-raw.zip"
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
+    )
 
 
 @router.post("/results/{task_id}/summary")

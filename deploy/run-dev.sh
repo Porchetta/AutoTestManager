@@ -10,6 +10,7 @@ set -euo pipefail
 # IMAGE_VERSION 생략 시 latest 사용
 
 BASE_DIR="/home/hyun/develope/AutoTestManager"
+BACKEND_DATA_DIR="${BASE_DIR}/backend/data"
 VERSION="${1:-latest}"
 SERVER_IP="$(hostname -I | awk '{print $1}')"
 BACKEND_API_URL="http://${SERVER_IP}:10223"
@@ -32,7 +33,7 @@ docker run -d \
   --restart unless-stopped \
   -p 10223:10223 \
   -v "${BASE_DIR}/backend/app:/app/app" \
-  -v "${BASE_DIR}/data:/data" \
+  -v "${BACKEND_DATA_DIR}:/data" \
   --env-file "${BASE_DIR}/backend.env" \
   atm-backend:"${VERSION}" \
   uvicorn app.main:app --host 0.0.0.0 --port 10223 --reload

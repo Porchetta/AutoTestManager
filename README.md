@@ -14,7 +14,7 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
 
 - RTD
   - Rule / Version 조회는 개발 라인 기준 SSH로 동작
-  - Macro 확인은 사용자가 `탐색` 버튼을 눌렀을 때만 `.rule` / macro 파일을 읽어 비교
+  - Macro 확인은 사용자가 `탐색` 버튼을 눌렀을 때만 `.report` 파일을 읽어 비교
   - 복사 / 컴파일 / 테스트는 커스텀 가능한 실행 훅을 통해 수행
   - 타겟 라인별 상태 모니터와 Raw Data 다운로드 제공
   - Step 6 `Execute all`로 `복사 -> 컴파일 -> 테스트 -> 결과서 생성`을 순차 실행 가능
@@ -74,7 +74,7 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
   - 실행 제어
 - Rule / Version catalog는 개발 서버 SSH 조회 기반
 - 선택한 Rule target 조합을 누적 관리
-- old/new `.rule` 파일 비교 후 Macro 차이 확인
+- old/new `.report` 파일 비교 후 Macro 차이 확인
 - Macro는 Step 4에서 수동 `탐색` 시에만 조회
 - 탐색된 Old / New Macro는 기본 전체선택 상태로 시작하며, 개별 체크 또는 `전체선택 / 전체 해제` 가능
 - 타겟 라인도 `전체 선택 / 전체 해제` 가능
@@ -113,9 +113,9 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
 - `backend/app/services/rtd_catalog_custom.py`
   - Rule source file 목록 조회
   - 파일명 파싱으로 `rule_name`, `version` 생성
-  - `.rule` 파일 텍스트 읽기
+  - `.report` 파일 텍스트 읽기
   - Rule 텍스트에서 Macro list 추출
-  - nested macro 재귀 탐색
+  - Rule 텍스트 1회 파싱
 - `backend/app/services/rtd_execution_custom.py`
   - 복사
   - 컴파일
@@ -124,8 +124,9 @@ RTD 및 ezDFS 테스트 흐름을 웹에서 관리하기 위한 `Vue 3 + FastAPI
   - 라인별 테스트 결과를 모아 집계 결과서 생성
 
 기본 구현은 다음을 전제로 합니다.
-- Rule 파일은 개발 라인 `home_dir_path`
-- Macro 파일은 개발 라인 기준 `../Macro`
+- RTD source 파일은 모두 `.report`
+- Dispatcher report 파일은 개발 라인 `home_dir_path`
+- Macro report 파일은 개발 라인 기준 `../Macro`
 - 원격 명령은 `bash --noprofile --norc -lc ...` 형식으로 실행
 - compile 명령: `./atm_compiler {rule_name} {line_name}`
 - test 명령: `./atm_testscript {rule_name} {line_name}`

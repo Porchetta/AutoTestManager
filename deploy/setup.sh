@@ -8,13 +8,14 @@ set -euo pipefail
 
 IMAGE_TAR="${1:?Usage: ./deploy/setup.sh <atm-images-xxx.tar.gz>}"
 BASE_DIR="/home/hyun/develope/AutoTestManager"
+BACKEND_DATA_DIR="${BASE_DIR}/backend/data"
 
 echo "=== [1/4] Creating data directory structure ==="
-mkdir -p "${BASE_DIR}/data/results/rtd/raw"
-mkdir -p "${BASE_DIR}/data/results/rtd/reports"
-mkdir -p "${BASE_DIR}/data/results/ezdfs/raw"
-mkdir -p "${BASE_DIR}/data/results/ezdfs/reports"
-mkdir -p "${BASE_DIR}/data/logs"
+mkdir -p "${BACKEND_DATA_DIR}/results/rtd/raw"
+mkdir -p "${BACKEND_DATA_DIR}/results/rtd/reports"
+mkdir -p "${BACKEND_DATA_DIR}/results/ezdfs/raw"
+mkdir -p "${BACKEND_DATA_DIR}/results/ezdfs/reports"
+mkdir -p "${BACKEND_DATA_DIR}/logs"
 
 echo "=== [2/4] Loading Docker images (${IMAGE_TAR}) ==="
 docker load < "${IMAGE_TAR}"

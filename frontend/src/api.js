@@ -39,7 +39,12 @@ http.interceptors.response.use(
       router?.push('/login')
     }
 
-    const detail = error.response?.data?.error?.message || error.response?.data?.detail || error.message
+    const responseData = error.response?.data
+    const detail = responseData?.error?.message
+      || responseData?.detail?.error?.message
+      || responseData?.detail?.message
+      || responseData?.detail
+      || error.message
     uiStore?.setError(typeof detail === 'string' ? detail : '요청 처리 중 오류가 발생했습니다.')
     return Promise.reject(error)
   },

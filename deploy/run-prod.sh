@@ -10,7 +10,8 @@ set -euo pipefail
 # Usage: ./deploy/run-prod.sh [IMAGE_VERSION]
 # IMAGE_VERSION 생략 시 latest 사용
 
-BASE_DIR="/opt/atm"
+BASE_DIR="/home/hyun/develope/AutoTestManager"
+BACKEND_DATA_DIR="${BASE_DIR}/backend/data"
 VERSION="${1:-latest}"
 SERVER_IP="$(hostname -I | awk '{print $1}')"
 SERVER_URL="http://${SERVER_IP}:4203"
@@ -32,7 +33,7 @@ docker run -d \
   --network atm-net \
   --restart unless-stopped \
   -v "${BASE_DIR}/backend/app:/app/app" \
-  -v "${BASE_DIR}/data:/data" \
+  -v "${BACKEND_DATA_DIR}:/data" \
   --env-file "${BASE_DIR}/backend.env" \
   atm-backend:"${VERSION}"
 
