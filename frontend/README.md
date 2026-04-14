@@ -10,8 +10,8 @@ npm run dev
 ```
 
 Default local URLs:
-- Frontend: `http://127.0.0.1:5173`
-- Backend API: `http://127.0.0.1:8000`
+- Frontend: `http://127.0.0.1:4203`
+- Backend API: `http://127.0.0.1:10223`
 
 Environment:
 - `VITE_API_BASE_URL`: backend base URL

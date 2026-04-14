@@ -9,7 +9,7 @@ ENV APP_ENV=offline
 ENV DB_PATH=/data/autotestmanager.db
 ENV RESULT_BASE_PATH=/data/results
 
-EXPOSE 8000
+EXPOSE 10223
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10223"]
 

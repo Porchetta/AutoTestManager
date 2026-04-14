@@ -10,4 +10,4 @@ if [[ ! -d "$VENV_DIR" ]]; then
 fi
 
 cd "$SCRIPT_DIR"
-"$VENV_DIR/bin/python" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+"$VENV_DIR/bin/python" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 10223
