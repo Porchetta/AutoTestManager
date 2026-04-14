@@ -212,16 +212,18 @@ async function dlSummary(taskId) {
       <article class="panel result-panel">
         <div class="panel-head result-panel-head">
           <h3>RTD Test Raw Data</h3>
-        </div>
-        <div class="result-filters">
-          <select v-model="rtdRaw.line" class="result-select">
-            <option value="">전체 Line</option>
-            <option v-for="l in rtdRaw.lineOptions" :key="l" :value="l">{{ l }}</option>
-          </select>
-          <select v-model="rtdRaw.rule" class="result-select">
-            <option value="">전체 Rule</option>
-            <option v-for="r in rtdRaw.ruleOptions" :key="r" :value="r">{{ r }}</option>
-          </select>
+          <div class="result-panel-tools">
+            <div class="result-filters result-filters-inline">
+              <select v-model="rtdRaw.line" class="result-select result-select-compact">
+                <option value="">전체 Line</option>
+                <option v-for="l in rtdRaw.lineOptions" :key="l" :value="l">{{ l }}</option>
+              </select>
+              <select v-model="rtdRaw.rule" class="result-select result-select-compact">
+                <option value="">전체 Rule</option>
+                <option v-for="r in rtdRaw.ruleOptions" :key="r" :value="r">{{ r }}</option>
+              </select>
+            </div>
+          </div>
         </div>
         <div class="result-list">
           <div v-if="rtdRaw.loading" class="result-empty muted">불러오는 중...</div>

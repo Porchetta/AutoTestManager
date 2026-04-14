@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.core.responses import success_response
 from app.models.entities import User
-from app.schemas.testing import EzdfsActionRequest, EzdfsAggregateSummaryRequest, EzdfsSessionPayload
+from app.schemas.testing import EzdfsActionRequest, EzdfsAggregateSummaryRequest, EzdfsSessionPayload, SvnUploadRequest
 from app.services.catalog_service import (
     get_ezdfs_modules,
     get_ezdfs_rules,
@@ -20,6 +20,7 @@ from app.services.file_service import (
     get_existing_download_path,
 )
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
+from app.services.svn_upload_custom import perform_ezdfs_svn_upload
 from app.services.task_service import (
     create_test_task,
     ensure_task_owner,
@@ -97,6 +98,16 @@ def delete_session(
 ):
     clear_runtime_session(db, current_user.user_id, TestType.EZDFS)
     return success_response({"message": "ezDFS session cleared"})
+
+
+@router.post("/svn-upload")
+def svn_upload(
+    payload: SvnUploadRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    result = perform_ezdfs_svn_upload(db, current_user, payload.ad_user, payload.ad_password)
+    return success_response({"svn_upload": result})
 
 
 def _create_ezdfs_task(

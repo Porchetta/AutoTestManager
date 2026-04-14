@@ -99,11 +99,18 @@ def generate_summary_file(db: Session, task: TestTask) -> Path:
     if task.status != TaskStatus.DONE.value:
         raise HTTPException(status_code=409, detail="Task is not completed yet")
 
-    task_dir = _ensure_task_dir(task)
-    file_path = task_dir / f"{task.test_type.lower()}_{task.task_id}_summary.xlsx"
+    file_path = _build_summary_output_path(db, task)
 
-    if task.test_type == "EZDFS":
+    if task.test_type == TestType.EZDFS.value:
         build_ezdfs_test_report_file(task, file_path)
+        task.summary_result_path = str(file_path)
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        return file_path
+
+    if task.test_type == TestType.RTD.value:
+        build_rtd_test_report_file([task], file_path, {})
         task.summary_result_path = str(file_path)
         db.add(task)
         db.commit()
@@ -307,6 +314,30 @@ def _normalize_target_line_name(line_name: str) -> str:
     return line_name
 
 
+def _build_summary_output_path(db: Session, task: TestTask) -> Path:
+    """Build the per-task summary xlsx path under `results/<type>/reports/<user>/`."""
+    report_dir = Path(settings.result_base_path) / task.test_type.lower() / "reports" / _sanitize_path_token(task.user_id)
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = (task.ended_at or task.started_at or task.requested_at or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    name_token = _build_summary_name_token(db, task)
+    return report_dir / f"{name_token}-{timestamp}-{task.task_id[:8]}.xlsx"
+
+
+def _build_summary_name_token(db: Session, task: TestTask) -> str:
+    """Build a human-readable summary filename token for one task."""
+    if task.test_type == TestType.EZDFS.value:
+        module_name = _extract_ezdfs_module_name(task) or task.target_name
+        return _sanitize_path_token(module_name)
+
+    if task.test_type == TestType.RTD.value:
+        line_name = _normalize_target_line_name(task.target_name)
+        config = db.query(RtdConfig).filter(RtdConfig.line_name == line_name).first()
+        return _sanitize_path_token(config.business_unit if config and config.business_unit else line_name)
+
+    return _sanitize_path_token(task.target_name or task.test_type)
+
+
 def _sanitize_path_token(value: str) -> str:
     sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "").strip())
     return sanitized.strip("._-") or "report"
@@ -460,5 +491,24 @@ def _extract_ezdfs_rule_name(task: TestTask) -> str:
     return str(
         requested_payload.get("rule_name")
         or nested_payload.get("selected_rule")
+        or ""
+    ).strip()
+
+
+def _extract_ezdfs_module_name(task: TestTask) -> str:
+    """Extract the selected ezDFS module name from one stored task payload."""
+    try:
+        requested_payload = json.loads(task.requested_payload_json or "{}")
+    except Exception:  # noqa: BLE001
+        return ""
+
+    nested_payload = (
+        requested_payload.get("payload")
+        if isinstance(requested_payload.get("payload"), dict)
+        else requested_payload
+    )
+    return str(
+        requested_payload.get("module_name")
+        or nested_payload.get("selected_module")
         or ""
     ).strip()

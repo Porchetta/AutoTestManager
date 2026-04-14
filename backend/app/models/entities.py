@@ -97,3 +97,10 @@ class RuntimeSession(Base):
     session_type: Mapped[str] = mapped_column(String(20), nullable=False)
     payload_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
+
+
+class DashboardLike(TimestampMixin, Base):
+    __tablename__ = "dashboard_likes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.user_id"), unique=True, index=True, nullable=False)

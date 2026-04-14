@@ -36,6 +36,14 @@ async function logout() {
         <div class="topbar-meta">
           <span class="topbar-badge topbar-badge-accent">{{ authStore.user?.module_name }}</span>
           <span class="topbar-badge">{{ authStore.user?.user_name }}</span>
+          <a
+            class="topbar-link-button"
+            href="http://go/atmguide"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            UserGuide
+          </a>
           <button
             class="theme-toggle-button"
             type="button"

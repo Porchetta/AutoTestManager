@@ -21,6 +21,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
   const modules = ref([]);
   const rules = ref([]);
   const subRuleError = ref("");
+  const svnUpload = ref({});
 
   async function loadInitialData() {
     modules.value = (await apiGet("/api/ezdfs/modules")).items;
@@ -79,6 +80,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
       major_change_items: majorChangeItems.value,
       active_task_id: currentTask.value?.task_id || null,
       latest_status: currentTask.value?.status || null,
+      svn_upload: svnUpload.value,
     });
   }
 
@@ -107,6 +109,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     subRuleMap.value = subRulesSearched.value ? (session.sub_rule_map || {}) : {};
     selectedSubRules.value = subRulesSearched.value ? (session.selected_sub_rules || []) : [];
     majorChangeItems.value = session.major_change_items || {};
+    svnUpload.value = session.svn_upload || {};
     currentTask.value = session.active_task_id ? { task_id: session.active_task_id } : null;
 
     if (selectedModule.value) {
@@ -432,6 +435,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     majorChangeItems.value = {};
     subRuleError.value = "";
     currentTask.value = null;
+    svnUpload.value = {};
     rules.value = [];
     tasks.value = [];
     await apiDelete("/api/ezdfs/session");
@@ -453,6 +457,23 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     await saveSession();
   }
 
+  async function uploadSvn(adUser, adPassword) {
+    const data = await apiPost("/api/ezdfs/svn-upload", {
+      ad_user: adUser,
+      ad_password: adPassword,
+    });
+    svnUpload.value = data.svn_upload || {};
+    return svnUpload.value;
+  }
+
+  async function confirmSvnUpload() {
+    svnUpload.value = {
+      ...svnUpload.value,
+      confirmed: true,
+    };
+    await saveSession();
+  }
+
   return {
     currentStep,
     selectedModule,
@@ -471,6 +492,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     modules,
     rules,
     subRuleError,
+    svnUpload,
     loadInitialData,
     loadRules,
     loadSubRules,
@@ -485,6 +507,8 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     selectAllSubRules,
     clearAllSubRules,
     updateMajorChangeItem,
+    uploadSvn,
+    confirmSvnUpload,
     setCurrentStep,
     run,
     runRule,

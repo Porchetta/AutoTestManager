@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.responses import success_response
-from app.models.entities import RtdConfig, TestTask, User
+from app.models.entities import DashboardLike, RtdConfig, TestTask, User
 from app.services.file_service import (
     generate_summary_file,
     get_ezdfs_raw_content_path,
@@ -23,7 +23,7 @@ from app.utils.enums import ActionType, TaskStatus, TestType
 router = APIRouter(prefix="/api/mypage", tags=["mypage"])
 
 _RESULT_TEST_ACTIONS = [ActionType.TEST.value, ActionType.RETEST.value]
-_PAGE_SIZE = 5
+_PAGE_SIZE = 8
 
 
 # ─── helpers ────────────────────────────────────────────────────────────────
@@ -71,6 +71,26 @@ def _task_module_name(task: TestTask) -> str:
         return str(n.get("selected_module") or p.get("module_name") or "").strip()
     except Exception:  # noqa: BLE001
         return ""
+
+
+def _rtd_action_display_name(action_type: str) -> str:
+    normalized = str(action_type or "").strip().upper()
+    if normalized == ActionType.COPY.value:
+        return "Copy"
+    if normalized == ActionType.COMPILE.value:
+        return "Compile"
+    if normalized in {ActionType.TEST.value, ActionType.RETEST.value}:
+        return "Testing"
+    return normalized.title() if normalized else ""
+
+
+def _queue_status_priority(status: str) -> int:
+    normalized = str(status or "").strip().upper()
+    if normalized == TaskStatus.RUNNING.value:
+        return 0
+    if normalized == TaskStatus.PENDING.value:
+        return 1
+    return 9
 
 
 def _paginate(items: list, page: int) -> tuple[list, int, int]:
@@ -254,12 +274,52 @@ def global_stats(
         elif row.test_type == TestType.EZDFS.value:
             ezdfs_monthly_map[row.ym] = row.cnt
 
+    like_count = db.query(func.count(DashboardLike.id)).scalar() or 0
+
     return success_response({
         "rtd_daily":     {"labels": daily_labels,   "counts": list(rtd_daily_map.values())},
         "rtd_monthly":   {"labels": monthly_labels, "counts": list(rtd_monthly_map.values())},
         "ezdfs_daily":   {"labels": daily_labels,   "counts": list(ezdfs_daily_map.values())},
         "ezdfs_monthly": {"labels": monthly_labels, "counts": list(ezdfs_monthly_map.values())},
+        "dashboard_like_count": int(like_count),
     })
+
+
+@router.get("/dashboard/like")
+def get_dashboard_like(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    liked = (
+        db.query(DashboardLike)
+        .filter(DashboardLike.user_id == current_user.user_id)
+        .first()
+        is not None
+    )
+    like_count = db.query(func.count(DashboardLike.id)).scalar() or 0
+    return success_response({"liked": liked, "count": int(like_count)})
+
+
+@router.post("/dashboard/like/toggle")
+def toggle_dashboard_like(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    existing = (
+        db.query(DashboardLike)
+        .filter(DashboardLike.user_id == current_user.user_id)
+        .first()
+    )
+    if existing is None:
+        db.add(DashboardLike(user_id=current_user.user_id))
+        liked = True
+    else:
+        db.delete(existing)
+        liked = False
+
+    db.commit()
+    like_count = db.query(func.count(DashboardLike.id)).scalar() or 0
+    return success_response({"liked": liked, "count": int(like_count)})
 
 
 # ─── Today counts (Dashboard용) ──────────────────────────────────────────────
@@ -289,6 +349,107 @@ def today_stats(
         "rtd": counts.get(TestType.RTD.value, 0),
         "ezdfs": counts.get(TestType.EZDFS.value, 0),
     })
+
+
+@router.get("/dashboard/queue")
+def dashboard_queue(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tasks = (
+        db.query(TestTask)
+        .filter(TestTask.status.in_([TaskStatus.RUNNING.value, TaskStatus.PENDING.value]))
+        .order_by(
+            TestTask.status.asc(),
+            TestTask.requested_at.asc(),
+            TestTask.id.asc(),
+        )
+        .limit(12)
+        .all()
+    )
+
+    owner_user_ids = sorted({task.user_id for task in tasks})
+    user_name_map = {
+        user.user_id: user.user_name
+        for user in db.query(User).filter(User.user_id.in_(owner_user_ids)).all()
+    }
+
+    rtd_line_names = sorted(
+        {
+            _normalize_line(task.target_name)
+            for task in tasks
+            if task.test_type == TestType.RTD.value
+        }
+    )
+    rtd_business_unit_map = {
+        config.line_name: config.business_unit
+        for config in db.query(RtdConfig).filter(RtdConfig.line_name.in_(rtd_line_names)).all()
+    }
+
+    grouped_items: dict[tuple[str, ...], dict] = {}
+    for task in tasks:
+        serialized = serialize_task(task)
+        module_name = str(serialized.get("module_name") or task.target_name or "").strip()
+        rule_name = str(serialized.get("rule_name") or "").strip()
+        user_name = user_name_map.get(task.user_id, task.user_id)
+
+        if task.test_type == TestType.RTD.value:
+            line_name = _normalize_line(task.target_name)
+            business_unit = rtd_business_unit_map.get(line_name, line_name)
+            action_label = _rtd_action_display_name(task.action_type)
+            group_key = ("RTD", business_unit, action_label, task.user_id)
+            queue_title = business_unit
+            queue_meta = f"{action_label} · {user_name}"
+        else:
+            group_key = ("EZDFS", module_name, task.user_id)
+            queue_title = module_name
+            queue_meta = user_name
+
+        candidate = {
+            "task_id": task.task_id,
+            "test_type": task.test_type,
+            "action_type": task.action_type,
+            "status": task.status,
+            "target_name": task.target_name,
+            "user_id": task.user_id,
+            "user_name": user_name,
+            "module_name": module_name,
+            "rule_name": rule_name,
+            "business_unit": business_unit if task.test_type == TestType.RTD.value else "",
+            "requested_at": task.requested_at.isoformat() if task.requested_at else None,
+            "message": task.message,
+            "queue_title": queue_title,
+            "queue_meta": queue_meta,
+        }
+
+        current = grouped_items.get(group_key)
+        if current is None:
+            grouped_items[group_key] = candidate
+            continue
+
+        current_requested_at = current.get("requested_at") or ""
+        candidate_requested_at = candidate.get("requested_at") or ""
+        current_priority = _queue_status_priority(str(current.get("status", "")))
+        candidate_priority = _queue_status_priority(task.status)
+        if (
+            candidate_priority < current_priority
+            or (
+                candidate_priority == current_priority
+                and candidate_requested_at < current_requested_at
+            )
+        ):
+            grouped_items[group_key] = candidate
+
+    items = sorted(
+        grouped_items.values(),
+        key=lambda item: (
+            item["test_type"],
+            _queue_status_priority(str(item["status"])),
+            str(item["queue_title"]).lower(),
+            str(item["queue_meta"]).lower(),
+        ),
+    )
+    return success_response({"items": items})
 
 
 # ─── RTD Raw Data ─────────────────────────────────────────────────────────────
@@ -469,7 +630,10 @@ def download_result(
     task = ensure_task_owner(db, task_id, current_user.user_id)
     if kind not in ("raw", "summary"):
         kind = "summary" if task.summary_result_path else "raw"
-    if kind == "summary" and not task.summary_result_path:
+    if kind == "summary" and task.test_type in {TestType.RTD.value, TestType.EZDFS.value}:
+        generate_summary_file(db, task)
+        db.refresh(task)
+    elif kind == "summary" and not task.summary_result_path:
         generate_summary_file(db, task)
         db.refresh(task)
 

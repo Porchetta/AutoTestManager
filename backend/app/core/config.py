@@ -21,6 +21,11 @@ class Settings(BaseSettings):
 
     db_path: str = str(BASE_DIR / "data" / "autotestmanager.db")
     result_base_path: str = str(BASE_DIR / "data" / "results")
+    svn_upload_host_ip: str = ""
+    svn_upload_host_user: str = ""
+    svn_upload_host_password: str = ""
+    svn_upload_dir: str = str(BASE_DIR / "data" / "svn_repo")
+    svn_upload_command: str = "svn_bin_checkin"
 
     default_admin_user_id: str = "admin"
     default_admin_password: str = "admin1234"
@@ -35,4 +40,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
