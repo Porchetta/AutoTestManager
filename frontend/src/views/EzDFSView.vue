@@ -42,9 +42,7 @@ const svnForm = ref({
   adPassword: "",
   svnNo: "",
 });
-const svnNeedsConfirm = computed(
-  () => Boolean(svnForm.value.svnNo) && svnUpload.value?.confirmed === false,
-);
+
 const svnResultText = ref("");
 const svnResultVisible = ref(false);
 let pollId = null;
@@ -101,14 +99,6 @@ const ruleTaskCards = computed(() =>
 );
 
 async function submitSvnUpload() {
-  if (svnNeedsConfirm.value) {
-    await ezdfsStore.confirmSvnUpload();
-    svnUploading.value = false;
-    svnForm.value.adPassword = "";
-    uiStore.setNotice("SVN Upload 정보가 저장되었습니다.");
-    return;
-  }
-
   if (!svnForm.value.adUser || !svnForm.value.adPassword) {
     uiStore.setError("AD 계정과 비밀번호를 모두 입력해주세요.");
     return;
@@ -643,13 +633,7 @@ async function resetFlow() {
                       type="submit"
                       :disabled="svnUploading || !selectedRules.length"
                     >
-                      {{
-                        svnNeedsConfirm
-                          ? "Confirm"
-                          : svnUploading
-                            ? "Uploading..."
-                            : "Upload"
-                      }}
+                      {{ svnUploading ? "Uploading..." : "Upload" }}
                     </button>
                   </div>
                   <label class="svn-upload-inline-field svn-upload-inline-result">

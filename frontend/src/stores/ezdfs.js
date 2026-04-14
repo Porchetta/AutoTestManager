@@ -466,14 +466,6 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     return svnUpload.value;
   }
 
-  async function confirmSvnUpload() {
-    svnUpload.value = {
-      ...svnUpload.value,
-      confirmed: true,
-    };
-    await saveSession();
-  }
-
   return {
     currentStep,
     selectedModule,
@@ -508,7 +500,6 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     clearAllSubRules,
     updateMajorChangeItem,
     uploadSvn,
-    confirmSvnUpload,
     setCurrentStep,
     run,
     runRule,

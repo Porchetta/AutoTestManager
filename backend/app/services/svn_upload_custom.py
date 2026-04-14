@@ -128,7 +128,12 @@ def perform_rtd_svn_upload(
             file_name,
         )
 
+    macro_review = session_payload.get("macro_review") or {}
+    new_macros = set(macro_review.get("new_macros") or [])
+
     for macro_file_name in _collect_selected_macro_file_names(selected_macros):
+        if macro_file_name not in new_macros:
+            continue
         file_contents[macro_file_name] = _read_rtd_macro_source_text(
             host,
             config.home_dir_path,
@@ -206,7 +211,8 @@ def perform_ezdfs_svn_upload(
         file_name = str(item.get("file_name") or "").strip()
         if not file_name:
             continue
-        file_contents[file_name] = read_ezdfs_rule_source_text(
+        cleaned_file_name = re.sub(r"-ver\..+\.rul$", ".rul", file_name, flags=re.IGNORECASE)
+        file_contents[cleaned_file_name] = read_ezdfs_rule_source_text(
             host,
             config.home_dir_path,
             file_name,
@@ -221,7 +227,9 @@ def perform_ezdfs_svn_upload(
         )
         if not sub_rule_file_name:
             raise ValueError(f"ezDFS sub rule file not found in session cache: {sub_rule_name}")
-        file_contents[sub_rule_file_name] = read_ezdfs_rule_source_text(
+        
+        cleaned_file_name = re.sub(r"-ver\..+\.rul$", ".rul", sub_rule_file_name, flags=re.IGNORECASE)
+        file_contents[cleaned_file_name] = read_ezdfs_rule_source_text(
             host,
             config.home_dir_path,
             sub_rule_file_name,
@@ -262,7 +270,7 @@ def _persist_svn_upload_result(
         "ad_user": ad_user,
         "svn_no": str(result["svn_no"]),
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
-        "confirmed": False,
+        "confirmed": True,
         "uploaded_files": list(result.get("uploaded_files", [])),
         "checkin_output": str(result.get("checkin_output", "")),
     }

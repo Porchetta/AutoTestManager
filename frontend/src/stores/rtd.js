@@ -435,14 +435,6 @@ export const useRtdStore = defineStore('rtd', () => {
     return svnUpload.value
   }
 
-  async function confirmSvnUpload() {
-    svnUpload.value = {
-      ...svnUpload.value,
-      confirmed: true,
-    }
-    await saveSession()
-  }
-
   return {
     currentStep,
     selectedBusinessUnit,
@@ -482,7 +474,6 @@ export const useRtdStore = defineStore('rtd', () => {
     waitForTaskIds,
     updateMajorChangeItem,
     uploadSvn,
-    confirmSvnUpload,
     resetFlow,
   }
 })
