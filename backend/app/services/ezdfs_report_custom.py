@@ -21,7 +21,12 @@ from openpyxl.styles import Alignment, Font
 from app.models.entities import TestTask
 
 
-def build_ezdfs_test_report_file(tasks: TestTask | list[TestTask], output_path: Path) -> Path:
+def build_ezdfs_test_report_file(
+    tasks: TestTask | list[TestTask],
+    output_path: Path,
+    selected_rule_names: list[str] | None = None,
+    fallback_major_change_items: dict[str, str] | None = None,
+) -> Path:
     """
     Build the ezDFS Excel summary report from one or more completed tasks.
 
@@ -37,21 +42,50 @@ def build_ezdfs_test_report_file(tasks: TestTask | list[TestTask], output_path: 
     - writes one row per ezDFS task
     - reads command from `_meta.txt`
     - reads detail text from the rule-named raw txt file
+    - if `selected_rule_names` is provided, only the latest task per selected
+      rule is written
+    - current session major change items override task payload values
 
     Customize this function if the offline environment needs a different
     workbook layout or richer parsing of raw outputs.
     """
     normalized_tasks = tasks if isinstance(tasks, list) else [tasks]
+    selected_rule_set = {
+        str(rule_name or "").strip()
+        for rule_name in (selected_rule_names or [])
+        if str(rule_name or "").strip()
+    }
+    if selected_rule_set:
+        filtered_tasks: list[TestTask] = []
+        seen_rules: set[str] = set()
+        for task in normalized_tasks:
+            rule_name = _resolve_ezdfs_rule_name(task)
+            if not rule_name or rule_name not in selected_rule_set or rule_name in seen_rules:
+                continue
+            seen_rules.add(rule_name)
+            filtered_tasks.append(task)
+        normalized_tasks = filtered_tasks
 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "ezdfs_test_report"
 
     sheet.append(_ezdfs_report_headers())
+    merged_major_change_items = _collect_major_change_items(
+        normalized_tasks,
+        fallback_major_change_items or {},
+    )
     for task in normalized_tasks:
         requested_payload = json.loads(task.requested_payload_json or "{}")
         payload = requested_payload.get("payload") if isinstance(requested_payload.get("payload"), dict) else requested_payload
-        sheet.append(_build_ezdfs_report_row(task, requested_payload, payload))
+        sheet.append(
+            _build_ezdfs_report_row(
+                task,
+                requested_payload,
+                payload,
+                merged_major_change_items,
+            )
+        )
 
     _style_ezdfs_report_sheet(sheet)
 
@@ -74,7 +108,12 @@ def _ezdfs_report_headers() -> list[str]:
     ]
 
 
-def _build_ezdfs_report_row(task: TestTask, requested_payload: dict, payload: dict) -> list[str]:
+def _build_ezdfs_report_row(
+    task: TestTask,
+    requested_payload: dict,
+    payload: dict,
+    merged_major_change_items: dict[str, str],
+) -> list[str]:
     """
     Convert one ezDFS task into one Excel row.
 
@@ -96,7 +135,9 @@ def _build_ezdfs_report_row(task: TestTask, requested_payload: dict, payload: di
     major_change_items = payload.get("major_change_items") if isinstance(payload.get("major_change_items"), dict) else {}
     sub_rule_map = payload.get("sub_rule_map") if isinstance(payload.get("sub_rule_map"), dict) else {}
     selected_sub_rules = payload.get("selected_sub_rules") if isinstance(payload.get("selected_sub_rules"), list) else []
-    major_change_text = str(major_change_items.get(rule_name, "")).strip()
+    major_change_text = str(
+        major_change_items.get(rule_name, "") or merged_major_change_items.get(rule_name, "")
+    ).strip()
     rule_sub_rules = [
         str(item).strip()
         for item in sub_rule_map.get(rule_name, [])
@@ -178,6 +219,59 @@ def _sanitize_ezdfs_path_token(value: str) -> str:
     normalized = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in str(value or "").strip())
     normalized = normalized.strip("._")
     return normalized or "raw"
+
+
+def _resolve_ezdfs_rule_name(task: TestTask) -> str:
+    """Resolve the logical ezDFS rule name from the stored task payload."""
+    try:
+        requested_payload = json.loads(task.requested_payload_json or "{}")
+    except Exception:  # noqa: BLE001
+        return str(task.target_name or "").strip()
+    payload = (
+        requested_payload.get("payload")
+        if isinstance(requested_payload.get("payload"), dict)
+        else requested_payload
+    )
+    return str(
+        payload.get("selected_rule")
+        or requested_payload.get("rule_name")
+        or task.target_name
+        or ""
+    ).strip()
+
+
+def _collect_major_change_items(
+    tasks: list[TestTask],
+    fallback_major_change_items: dict[str, str],
+) -> dict[str, str]:
+    """Merge task payload values first, then override with current session values."""
+    merged: dict[str, str] = {}
+    for task in tasks:
+        try:
+            requested_payload = json.loads(task.requested_payload_json or "{}")
+        except Exception:  # noqa: BLE001
+            continue
+        payload = (
+            requested_payload.get("payload")
+            if isinstance(requested_payload.get("payload"), dict)
+            else requested_payload
+        )
+        major_change_items = (
+            payload.get("major_change_items")
+            if isinstance(payload.get("major_change_items"), dict)
+            else {}
+        )
+        for rule_name, text in major_change_items.items():
+            normalized_rule = str(rule_name or "").strip()
+            normalized_text = str(text or "").strip()
+            if normalized_rule and normalized_text:
+                merged[normalized_rule] = normalized_text
+    for rule_name, text in (fallback_major_change_items or {}).items():
+        normalized_rule = str(rule_name or "").strip()
+        normalized_text = str(text or "").strip()
+        if normalized_rule and normalized_text:
+            merged[normalized_rule] = normalized_text
+    return merged
 
 
 def _style_ezdfs_report_sheet(sheet) -> None:

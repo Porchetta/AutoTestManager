@@ -636,6 +636,10 @@ async function resetFlow() {
                       {{ svnUploading ? "Uploading..." : "Upload" }}
                     </button>
                   </div>
+                  <div
+                    class="svn-upload-inline-divider"
+                    aria-hidden="true"
+                  ></div>
                   <label class="svn-upload-inline-field svn-upload-inline-result">
                     <span class="svn-upload-inline-label">SVN No.</span>
                     <input :value="svnForm.svnNo" type="text" readonly />

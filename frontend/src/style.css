@@ -1712,21 +1712,24 @@ select option {
 
 .svn-upload-inline-row {
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) minmax(100px, 1fr) auto minmax(100px, 0.9fr) auto;
-  gap: 10px;
+  grid-template-columns: max-content max-content auto 1px max-content auto;
+  gap: 12px;
   align-items: center;
 }
 
 .svn-upload-inline-field,
 .svn-upload-inline-action,
-.svn-upload-inline-result {
+.svn-upload-inline-result,
+.svn-upload-inline-divider {
   min-width: 0;
 }
 
 .svn-upload-inline-field {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  column-gap: 6px;
+  justify-self: start;
 }
 
 .svn-upload-inline-label {
@@ -1739,16 +1742,30 @@ select option {
 
 .svn-upload-inline-field input {
   min-height: 36px;
+  width: 112px;
+  max-width: 112px;
 }
 
 .svn-upload-inline-action {
   display: flex;
   align-items: center;
+  justify-content: center;
 }
 
 .svn-upload-inline-action .button {
   min-height: 36px;
   padding-inline: 18px;
+}
+
+.svn-upload-inline-divider {
+  align-self: stretch;
+  width: 1px;
+  background: var(--border);
+  opacity: 0.9;
+}
+
+.svn-upload-inline-result {
+  grid-template-columns: max-content minmax(0, 1fr);
 }
 
 .svn-upload-inline-result input[readonly] {
@@ -2089,6 +2106,11 @@ select option {
 
 .admin-console-grid {
   gap: 20px;
+  min-width: 0;
+}
+
+.admin-console-grid > * {
+  min-width: 0;
 }
 
 .admin-form-panel {
@@ -2104,6 +2126,8 @@ select option {
 
 /* ---------- Tables ---------- */
 .table-wrap {
+  width: 100%;
+  max-width: 100%;
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -2314,6 +2338,7 @@ select option {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex-wrap: nowrap;
 }
 
 .edit-icon-button {
@@ -2339,9 +2364,17 @@ select option {
   overflow: hidden;
 }
 
+.console-grid-table .data-table {
+  min-width: 1080px;
+}
+
 .console-grid-table .panel-head {
   padding: 16px 18px 4px;
   margin-bottom: 0;
+}
+
+.console-grid-table .inline-edit-cell {
+  min-width: 200px;
 }
 
 .console-grid-table .data-table tbody td {

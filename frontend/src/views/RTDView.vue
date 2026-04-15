@@ -197,6 +197,20 @@ const selectedRuleNames = computed(() => [
   ),
 ]);
 
+const selectedRuleCards = computed(() => {
+  const ruleMap = new Map();
+  for (const item of selectedRuleTargets.value) {
+    const ruleName = String(item?.rule_name || "").trim();
+    if (!ruleName || ruleMap.has(ruleName)) continue;
+    ruleMap.set(ruleName, {
+      rule_name: ruleName,
+      new_version: String(item?.new_version || "").trim(),
+      old_version: String(item?.old_version || "").trim(),
+    });
+  }
+  return Array.from(ruleMap.values());
+});
+
 const monitorRuleOptions = computed(() => [
   { value: "__ALL__", label: "ALL" },
   ...selectedRuleNames.value.map((ruleName) => ({
@@ -1032,6 +1046,10 @@ async function resetFlow() {
                       {{ svnUploading ? "Uploading..." : "Upload" }}
                     </button>
                   </div>
+                  <div
+                    class="svn-upload-inline-divider"
+                    aria-hidden="true"
+                  ></div>
                   <label class="svn-upload-inline-field svn-upload-inline-result">
                     <span class="svn-upload-inline-label">SVN No.</span>
                     <input :value="svnForm.svnNo" type="text" readonly />
@@ -1056,20 +1074,24 @@ async function resetFlow() {
             >
               <div class="task-grid compact-grid ezdfs-rule-board rtd-major-change-board">
                 <div
-                  v-for="ruleName in selectedRuleNames"
-                  :key="`rtd-major-change-${ruleName}`"
+                  v-for="item in selectedRuleCards"
+                  :key="`rtd-major-change-${item.rule_name}`"
                   class="task-card ezdfs-rule-card"
                 >
                   <div class="task-head">
-                    <strong>{{ ruleName }}</strong>
+                    <strong>{{ item.rule_name }}</strong>
                   </div>
+                  <p class="muted">New Version : {{ item.new_version || "없음" }}</p>
+                  <p class="muted">
+                    Old Version : {{ item.old_version || "없음" }}
+                  </p>
                   <label class="field ezdfs-major-change-field">
                     <span>주요 변경 항목</span>
                     <textarea
                       rows="3"
-                      :value="majorChangeItems[ruleName] || ''"
+                      :value="majorChangeItems[item.rule_name] || ''"
                       placeholder="변경 항목을 입력하세요"
-                      @input="updateMajorChange(ruleName, $event.target.value)"
+                      @input="updateMajorChange(item.rule_name, $event.target.value)"
                     ></textarea>
                   </label>
                 </div>

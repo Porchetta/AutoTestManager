@@ -119,3 +119,8 @@
 2026-04-14 18:40:48 [SSH_LIMIT_FALLBACK] host=svn-upload-host ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
 2026-04-14 18:49:13 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
 2026-04-14 18:49:15 [SSH_LIMIT_FALLBACK] host=svn-upload-host ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-15 12:55:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-15 12:59:20 [SSH_LIMIT_FALLBACK] host=svn-upload-host ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-15 13:17:32 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-15 13:26:39 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-15 13:47:58 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 reason=Remote sshd maxstartups value is empty fallback=10

@@ -27,6 +27,7 @@ def build_rtd_test_report_file(
     tasks: list[TestTask],
     output_path: Path,
     fallback_major_change_items: dict[str, str] | None = None,
+    selected_rule_names: list[str] | None = None,
 ) -> Path:
     """
     Build the aggregate RTD Excel report from completed RTD test tasks.
@@ -45,6 +46,7 @@ def build_rtd_test_report_file(
     - writes one row per `line x rule_name`
     - de-duplicates rows by `(line_name, rule_name)` using the first task seen
     - merges major change text from task payloads and fallback session values
+    - if `selected_rule_names` is provided, only those rules are emitted
     """
     workbook = Workbook()
     sheet = workbook.active
@@ -52,6 +54,11 @@ def build_rtd_test_report_file(
 
     sheet.append(_rtd_report_headers())
     merged_major_change_items = _collect_major_change_items(tasks, fallback_major_change_items or {})
+    selected_rule_set = {
+        str(rule_name or "").strip()
+        for rule_name in (selected_rule_names or [])
+        if str(rule_name or "").strip()
+    }
     seen_keys: set[tuple[str, str]] = set()
     row_items: list[dict[str, str | list[str]]] = []
     for task in tasks:
@@ -62,6 +69,8 @@ def build_rtd_test_report_file(
             else requested_payload
         )
         for row_item in _build_rtd_report_rows(task, requested_payload, payload, merged_major_change_items):
+            if selected_rule_set and str(row_item["rule_name"]) not in selected_rule_set:
+                continue
             row_key = (row_item["line_name"], row_item["rule_name"])
             if row_key in seen_keys:
                 continue
@@ -243,15 +252,12 @@ def _collect_major_change_items(
     fallback_major_change_items: dict[str, str],
 ) -> dict[str, str]:
     """
-    Merge rule-level major change text from current session and stored tasks.
+    Merge rule-level major change text from stored tasks and current session.
 
-    Later task values win so the report uses the latest known text per rule.
+    Current session values win so the report reflects what the user has typed
+    at report-generation time.
     """
-    merged: dict[str, str] = {
-        str(rule_name or "").strip(): str(text or "").strip()
-        for rule_name, text in (fallback_major_change_items or {}).items()
-        if str(rule_name or "").strip() and str(text or "").strip()
-    }
+    merged: dict[str, str] = {}
     for task in tasks:
         try:
             requested_payload = json.loads(task.requested_payload_json or "{}")
@@ -272,6 +278,11 @@ def _collect_major_change_items(
             normalized_text = str(text or "").strip()
             if normalized_rule and normalized_text:
                 merged[normalized_rule] = normalized_text
+    for rule_name, text in (fallback_major_change_items or {}).items():
+        normalized_rule = str(rule_name or "").strip()
+        normalized_text = str(text or "").strip()
+        if normalized_rule and normalized_text:
+            merged[normalized_rule] = normalized_text
     return merged
 
 

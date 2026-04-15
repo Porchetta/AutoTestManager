@@ -102,7 +102,13 @@ def generate_summary_file(db: Session, task: TestTask) -> Path:
     file_path = _build_summary_output_path(db, task)
 
     if task.test_type == TestType.EZDFS.value:
-        build_ezdfs_test_report_file(task, file_path)
+        runtime_payload = get_runtime_session_payload(db, task.user_id, TestType.EZDFS)
+        fallback_major_change_items = (
+            runtime_payload.get("major_change_items")
+            if isinstance(runtime_payload.get("major_change_items"), dict)
+            else {}
+        )
+        build_ezdfs_test_report_file(task, file_path, None, fallback_major_change_items)
         task.summary_result_path = str(file_path)
         db.add(task)
         db.commit()
@@ -110,7 +116,13 @@ def generate_summary_file(db: Session, task: TestTask) -> Path:
         return file_path
 
     if task.test_type == TestType.RTD.value:
-        build_rtd_test_report_file([task], file_path, {})
+        runtime_payload = get_runtime_session_payload(db, task.user_id, TestType.RTD)
+        fallback_major_change_items = (
+            runtime_payload.get("major_change_items")
+            if isinstance(runtime_payload.get("major_change_items"), dict)
+            else {}
+        )
+        build_rtd_test_report_file([task], file_path, fallback_major_change_items)
         task.summary_result_path = str(file_path)
         db.add(task)
         db.commit()
@@ -235,17 +247,35 @@ def generate_aggregate_rtd_summary_file(
     if not tasks:
         raise HTTPException(status_code=404, detail="No RTD test results found for selected target lines")
 
-    report_dir = Path(settings.result_base_path) / "rtd" / "reports" / _sanitize_path_token(user_id)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    business_unit_token = _build_business_unit_token(db, target_set)
-    output_path = report_dir / f"{business_unit_token}-{timestamp}.xlsx"
     runtime_payload = get_runtime_session_payload(db, user_id, TestType.RTD)
     fallback_major_change_items = (
         runtime_payload.get("major_change_items")
         if isinstance(runtime_payload.get("major_change_items"), dict)
         else {}
     )
-    return build_rtd_test_report_file(tasks, output_path, fallback_major_change_items)
+    selected_rule_targets = (
+        runtime_payload.get("selected_rule_targets")
+        if isinstance(runtime_payload.get("selected_rule_targets"), list)
+        else []
+    )
+    selected_rule_names = list(
+        dict.fromkeys(
+            str(item.get("rule_name") or "").strip()
+            for item in selected_rule_targets
+            if str(item.get("rule_name") or "").strip()
+        )
+    )
+
+    report_dir = Path(settings.result_base_path) / "rtd" / "reports" / _sanitize_path_token(user_id)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    business_unit_token = _build_business_unit_token(db, target_set)
+    output_path = report_dir / f"{business_unit_token}-{timestamp}.xlsx"
+    return build_rtd_test_report_file(
+        tasks,
+        output_path,
+        fallback_major_change_items,
+        selected_rule_names,
+    )
 
 
 def generate_aggregate_ezdfs_summary_file(
@@ -270,15 +300,43 @@ def generate_aggregate_ezdfs_summary_file(
         )
         .all()
     )
-    task_map = {task.task_id: task for task in tasks if task.status == TaskStatus.DONE.value}
-    ordered_tasks = [task_map[task_id] for task_id in ordered_task_ids if task_id in task_map]
-    if not ordered_tasks:
+    done_tasks = [task for task in tasks if task.status == TaskStatus.DONE.value]
+    done_tasks.sort(key=lambda task: (task.requested_at, task.id), reverse=True)
+    if not done_tasks:
         raise HTTPException(status_code=404, detail="No completed ezDFS test results found for selected rules")
+
+    runtime_payload = get_runtime_session_payload(db, user_id, TestType.EZDFS)
+    selected_rules = (
+        runtime_payload.get("selected_rules")
+        if isinstance(runtime_payload.get("selected_rules"), list)
+        else []
+    )
+    selected_rule_names = list(
+        dict.fromkeys(
+            str(item.get("rule_name") or "").strip()
+            for item in selected_rules
+            if isinstance(item, dict) and str(item.get("rule_name") or "").strip()
+        )
+    )
+    if not selected_rule_names:
+        selected_rule = str(runtime_payload.get("selected_rule") or "").strip()
+        if selected_rule:
+            selected_rule_names = [selected_rule]
 
     report_dir = Path(settings.result_base_path) / "ezdfs" / "reports" / _sanitize_path_token(user_id)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = report_dir / f"{_sanitize_path_token(module_name)}-{timestamp}.xlsx"
-    return build_ezdfs_test_report_file(ordered_tasks, output_path)
+    fallback_major_change_items = (
+        runtime_payload.get("major_change_items")
+        if isinstance(runtime_payload.get("major_change_items"), dict)
+        else {}
+    )
+    return build_ezdfs_test_report_file(
+        done_tasks,
+        output_path,
+        selected_rule_names,
+        fallback_major_change_items,
+    )
 
 
 def _build_target_line_token(target_lines: list[str]) -> str:
