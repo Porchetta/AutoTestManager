@@ -14,6 +14,7 @@ BACKEND_DATA_DIR="${BASE_DIR}/backend/data"
 VERSION="${1:-latest}"
 SERVER_IP="$(hostname -I | awk '{print $1}')"
 BACKEND_API_URL="http://${SERVER_IP}:10223"
+BACKEND_DEBUG_PORT="${BACKEND_DEBUG_PORT:-5678}"
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
 
@@ -30,17 +31,19 @@ docker rm   atm-backend atm-frontend 2>/dev/null || true
 echo ""
 echo "=== Starting backend (dev, --reload) ==="
 echo "    container user: ${HOST_UID}:${HOST_GID}"
+echo "    debugpy port  : ${BACKEND_DEBUG_PORT}"
 docker run -d \
   --name atm-backend \
   --network atm-net \
   --restart unless-stopped \
   --user "${HOST_UID}:${HOST_GID}" \
   -p 10223:10223 \
+  -p "${BACKEND_DEBUG_PORT}:${BACKEND_DEBUG_PORT}" \
   -v "${BASE_DIR}/backend/app:/app/app" \
   -v "${BACKEND_DATA_DIR}:/data" \
   --env-file "${BASE_DIR}/backend.env" \
   atm-backend:"${VERSION}" \
-  uvicorn app.main:app --host 0.0.0.0 --port 10223 --reload
+  python -m debugpy --listen "0.0.0.0:${BACKEND_DEBUG_PORT}" -m uvicorn app.main:app --host 0.0.0.0 --port 10223 --reload
 
 echo ""
 echo "=== Starting frontend (dev, Vite HMR, port 4203) ==="
@@ -61,6 +64,7 @@ echo "Dev environment started (image: ${VERSION})"
 echo ""
 echo "  Frontend : http://${SERVER_IP}:4203"
 echo "  Backend  : http://${SERVER_IP}:10223"
+echo "  Debugpy  : ${SERVER_IP}:${BACKEND_DEBUG_PORT}"
 echo "  API Docs : http://${SERVER_IP}:10223/docs"
 echo ""
 echo "소스 수정 후 저장하면 자동 반영됩니다."
