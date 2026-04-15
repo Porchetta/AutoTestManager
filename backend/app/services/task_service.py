@@ -207,6 +207,28 @@ def run_mock_task(task_id: str, step: str) -> None:
         db.close()
 
 
+def fail_inflight_tasks_on_startup(db: Session) -> int:
+    inflight_tasks = (
+        db.query(TestTask)
+        .filter(TestTask.status.in_([TaskStatus.PENDING.value, TaskStatus.RUNNING.value]))
+        .all()
+    )
+    if not inflight_tasks:
+        return 0
+
+    ended_at = _now()
+    for task in inflight_tasks:
+        was_pending = task.status == TaskStatus.PENDING.value
+        task.status = TaskStatus.FAIL.value
+        task.ended_at = ended_at
+        if was_pending:
+            task.started_at = task.started_at or ended_at
+        task.message = "Marked as FAIL on server startup: backend restarted before completion"
+        db.add(task)
+    db.commit()
+    return len(inflight_tasks)
+
+
 def list_tasks_by_type(db: Session, user_id: str, test_type: TestType, limit: int = 50) -> list[TestTask]:
     return (
         db.query(TestTask)

@@ -11,8 +11,9 @@ from app.api.ezdfs import router as ezdfs_router
 from app.api.mypage import router as mypage_router
 from app.api.rtd import router as rtd_router
 from app.core.config import get_settings
-from app.db.session import init_db
+from app.db.session import SessionLocal, init_db
 from app.services.bootstrap import ensure_default_admin, ensure_storage_dirs
+from app.services.task_service import fail_inflight_tasks_on_startup
 
 settings = get_settings()
 
@@ -22,6 +23,11 @@ async def lifespan(_: FastAPI):
     ensure_storage_dirs()
     init_db()
     ensure_default_admin()
+    db = SessionLocal()
+    try:
+        fail_inflight_tasks_on_startup(db)
+    finally:
+        db.close()
     yield
 
 
