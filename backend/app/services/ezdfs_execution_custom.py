@@ -20,8 +20,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import RemoteCommandError, SSHConnectionError
 from app.models.entities import EzdfsConfig, HostConfig, TestTask
 from app.services.ssh_runtime import open_limited_ssh_client
+from app.utils.ssh_helpers import build_clean_bash_command, extract_session_payload
 
 
 def execute_ezdfs_test_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
@@ -48,7 +50,7 @@ def execute_ezdfs_test_action(db: Session, task: TestTask, payload: dict[str, An
     Intended customization point:
     - default command example: `<home_dir>/ezDFS_test {rule_name}`
     """
-    session_payload = _extract_session_payload(payload)
+    session_payload = extract_session_payload(payload)
     module_name = str(
         payload.get("module_name")
         or session_payload.get("selected_module")
@@ -74,14 +76,6 @@ def execute_ezdfs_test_action(db: Session, task: TestTask, payload: dict[str, An
     }
 
 
-def _extract_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Return nested ezDFS session payload when the API wrapper uses `payload`."""
-    nested_payload = payload.get("payload")
-    if isinstance(nested_payload, dict):
-        return nested_payload
-    return payload
-
-
 def _get_ezdfs_module_context(db: Session, module_name: str) -> tuple[EzdfsConfig, HostConfig]:
     """Resolve one ezDFS module config and its HostConfig by module name."""
     config = db.query(EzdfsConfig).filter(EzdfsConfig.module_name == module_name).first()
@@ -93,24 +87,6 @@ def _get_ezdfs_module_context(db: Session, module_name: str) -> tuple[EzdfsConfi
         raise ValueError(f"Host config not found: {config.host_name}")
 
     return config, host
-
-
-def _run_remote_command(host: HostConfig, working_dir: str, command: str, timeout: int = 120) -> str:
-    """Run one remote command inside `working_dir` and return trimmed stdout."""
-    remote_command = _build_clean_bash_command(f"cd {shlex.quote(working_dir)} && {command}")
-    try:
-        with open_limited_ssh_client(host) as client:
-            _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
-            exit_status = stdout.channel.recv_exit_status()
-            output = stdout.read().decode("utf-8", errors="ignore").strip()
-            error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"Remote command failed on host={host.name}: {exc}") from exc
-
-    if exit_status != 0:
-        raise RuntimeError(error_output or f"Remote command failed with exit status {exit_status}")
-
-    return output
 
 
 def _run_ezdfs_test_binary(
@@ -140,7 +116,7 @@ def _run_ezdfs_test_binary(
     """
     binary_path = posixpath.join(working_dir, "ezDFS_test")
     executable_command = f"{shlex.quote(binary_path)} {shlex.quote(rule_name)}"
-    remote_command = _build_clean_bash_command(
+    remote_command = build_clean_bash_command(
         " && ".join(
             [
                 f"cd {shlex.quote(working_dir)}",
@@ -156,18 +132,17 @@ def _run_ezdfs_test_binary(
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore").strip()
             error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"Remote command failed on host={host.name}: {exc}") from exc
+    except (SSHConnectionError, OSError) as exc:
+        raise SSHConnectionError(f"Remote command failed on host={host.name}: {exc}") from exc
 
     if exit_status != 0:
-        raise RuntimeError(
+        raise RemoteCommandError(
             error_output
-            or f"ezDFS_test execution failed in {working_dir} for rule={rule_name}"
+            or f"ezDFS_test execution failed in {working_dir} for rule={rule_name}",
+            host=host.name,
+            exit_status=exit_status,
         )
 
     return output, executable_command
 
 
-def _build_clean_bash_command(command: str) -> str:
-    """Wrap shell snippets in a minimal bash invocation for predictable execution."""
-    return f"bash --noprofile --norc -lc {shlex.quote(command)}"

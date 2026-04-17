@@ -29,9 +29,9 @@ from app.services.ezdfs_catalog_custom import (
     read_rule_source_bytes as read_ezdfs_rule_source_bytes,
 )
 from app.services.rtd_catalog_custom import (
-    _build_clean_bash_command as build_rtd_clean_bash_command,
     read_rule_source_bytes as read_rtd_rule_source_bytes,
 )
+from app.utils.ssh_helpers import build_clean_bash_command
 from app.services.session_service import (
     get_runtime_session_payload,
     upsert_runtime_session,
@@ -390,7 +390,7 @@ def _run_remote_shell_command(
 ) -> str:
     """Run a simple non-interactive shell command on the remote SVN host."""
 
-    remote_command = "bash --noprofile --norc -lc " + shlex.quote(command)
+    remote_command = build_clean_bash_command(command)
     with open_limited_ssh_client(host) as client:
         _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
         exit_status = stdout.channel.recv_exit_status()
@@ -476,7 +476,7 @@ def _read_rtd_macro_source_bytes(host: HostConfig, home_dir_path: str, file_name
                     return remote_file.read()
             finally:
                 sftp.close()
-    except Exception as exc:  # noqa: BLE001
+    except (OSError, RuntimeError) as exc:
         raise RuntimeError(f"SFTP macro file byte read failed: {exc}") from exc
 
 

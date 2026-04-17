@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     svn_upload_dir: str = str(BASE_DIR / "data" / "svn_repo")
     svn_upload_command: str = "svn_bin_checkin"
 
+    cors_origins: str = "*"
+
     default_admin_user_id: str = "admin"
     default_admin_password: str = "admin1234"
     default_admin_name: str = "Default Admin"

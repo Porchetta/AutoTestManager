@@ -19,10 +19,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import ConfigNotFoundError, RemoteCommandError, SSHConnectionError
 from app.models.entities import HostConfig, RtdConfig, TestTask
 from app.services.session_service import get_runtime_session_payload
 from app.services.ssh_runtime import open_limited_ssh_client
 from app.utils.enums import TestType
+from app.utils.naming import normalize_target_line_name
+from app.utils.ssh_helpers import build_clean_bash_command, extract_session_payload, run_remote_command
 
 
 def execute_copy_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
@@ -53,7 +56,7 @@ def execute_copy_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
     - target rule files: <target_home_dir>/
     - target macro files: <target_home_dir>/../Macro/
     """
-    session_payload = _extract_session_payload(payload)
+    session_payload = extract_session_payload(payload)
     dev_line_name = session_payload.get("selected_line_name") or payload.get("selected_line_name") or ""
     if not dev_line_name:
         raise ValueError("selected_line_name is required for copy action")
@@ -125,7 +128,7 @@ def execute_compile_action(db: Session, task: TestTask, payload: dict[str, Any])
     Intended customization point:
     - command example: `atm_compiler {ReportName} {LineName}`
     """
-    session_payload = _extract_session_payload(payload)
+    session_payload = extract_session_payload(payload)
     config, host = _get_rtd_line_context(db, task.target_name)
     rule_names = _collect_selected_rule_names(session_payload)
     macro_names = _collect_macro_file_names(session_payload)
@@ -137,10 +140,10 @@ def execute_compile_action(db: Session, task: TestTask, payload: dict[str, Any])
     # so compile starts from the lowest-priority end of that ordered list.
     for macro_name in reversed(macro_names):
         command = f"./atm_compiler {shlex.quote(macro_name)} {shlex.quote(config.line_name)}"
-        outputs.append(_run_remote_command(host, config.home_dir_path, command))
+        outputs.append(run_remote_command(host, config.home_dir_path, command))
     for rule_name in rule_names:
         command = f"./atm_compiler {shlex.quote(rule_name)} {shlex.quote(config.line_name)}"
-        outputs.append(_run_remote_command(host, config.home_dir_path, command))
+        outputs.append(run_remote_command(host, config.home_dir_path, command))
 
     return {
         "message": (
@@ -180,7 +183,7 @@ def execute_test_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
     Intended customization point:
     - command example: `atm_testscript {ReportName} {LineName}`
     """
-    session_payload = _extract_session_payload(payload)
+    session_payload = extract_session_payload(payload)
     config, host = _get_rtd_line_context(db, task.target_name)
     rule_names = _collect_selected_rule_names(session_payload)
     if not rule_names:
@@ -190,7 +193,7 @@ def execute_test_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
     output_by_rule: list[tuple[str, str]] = []
     for rule_name in rule_names:
         command = f"./atm_testscript {shlex.quote(rule_name)} {shlex.quote(config.line_name)}"
-        output = _run_remote_command(host, config.home_dir_path, command)
+        output = run_remote_command(host, config.home_dir_path, command)
         outputs.append(output)
         output_by_rule.append((rule_name, output))
 
@@ -201,14 +204,6 @@ def execute_test_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
     }
 
 
-def _extract_session_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    """Return nested RTD session payload when the API wrapper uses `payload`."""
-    nested_payload = payload.get("payload")
-    if isinstance(nested_payload, dict):
-        return nested_payload
-    return payload
-
-
 def _macro_dir_from_home(home_dir_path: str) -> str:
     """Resolve the sibling Macro directory from a Dispatcher home path."""
     return posixpath.normpath(posixpath.join(home_dir_path, "..", "Macro"))
@@ -216,7 +211,7 @@ def _macro_dir_from_home(home_dir_path: str) -> str:
 
 def _get_rtd_line_context(db: Session, line_name: str) -> tuple[RtdConfig, HostConfig]:
     """Resolve one RTD line config and its HostConfig from a line or target name."""
-    resolved_line_name = _normalize_target_line_name(line_name)
+    resolved_line_name = normalize_target_line_name(line_name)
     config = db.query(RtdConfig).filter(RtdConfig.line_name == resolved_line_name).first()
     if config is None:
         raise ValueError(f"RTD config not found: {resolved_line_name}")
@@ -226,13 +221,6 @@ def _get_rtd_line_context(db: Session, line_name: str) -> tuple[RtdConfig, HostC
         raise ValueError(f"Host config not found: {config.host_name}")
 
     return config, host
-
-
-def _normalize_target_line_name(line_name: str) -> str:
-    """Strip `_TARGET` suffix so task names map back to RTD config line names."""
-    if line_name.endswith("_TARGET"):
-        return line_name[: -len("_TARGET")]
-    return line_name
 
 
 def _collect_rule_file_names(
@@ -392,38 +380,24 @@ def _copy_files_between_hosts(
     return copied_count
 
 
-def _run_remote_command(host: HostConfig, working_dir: str, command: str, timeout: int = 120) -> str:
-    """Run one command inside `working_dir` and return trimmed stdout text."""
-    remote_command = _build_clean_bash_command(f"cd {shlex.quote(working_dir)} && {command}")
-    try:
-        with open_limited_ssh_client(host) as client:
-            _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
-            exit_status = stdout.channel.recv_exit_status()
-            output = stdout.read().decode("utf-8", errors="ignore").strip()
-            error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"Remote command failed on host={host.name}: {exc}") from exc
-
-    if exit_status != 0:
-        raise RuntimeError(error_output or f"Remote command failed with exit status {exit_status}")
-
-    return output
-
-
 def _run_remote_shell_command(host: HostConfig, command: str, timeout: int = 120) -> str:
     """Run one raw shell command without changing directories and return stdout."""
-    remote_command = _build_clean_bash_command(command)
+    remote_command = build_clean_bash_command(command)
     try:
         with open_limited_ssh_client(host) as client:
             _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore").strip()
             error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"Remote command failed on host={host.name}: {exc}") from exc
+    except (SSHConnectionError, OSError) as exc:
+        raise SSHConnectionError(f"Remote command failed on host={host.name}: {exc}") from exc
 
     if exit_status != 0:
-        raise RuntimeError(error_output or f"Remote command failed with exit status {exit_status}")
+        raise RemoteCommandError(
+            error_output or f"Remote command failed with exit status {exit_status}",
+            host=host.name,
+            exit_status=exit_status,
+        )
 
     return output
 
@@ -473,11 +447,6 @@ def _copy_remote_file_with_cp(host: HostConfig, source_path: str, target_path: s
         raise RuntimeError(
             f"copy failed on host={host.name}: {source_normalized} -> {target_normalized}"
         ) from exc
-
-
-def _build_clean_bash_command(command: str) -> str:
-    """Wrap shell snippets in a minimal bash invocation for predictable execution."""
-    return f"bash --noprofile --norc -lc {shlex.quote(command)}"
 
 
 def _summarize_remote_outputs(outputs: list[str]) -> str:

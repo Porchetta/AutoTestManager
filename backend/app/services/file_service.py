@@ -15,6 +15,7 @@ from app.services.ezdfs_report_custom import build_ezdfs_test_report_file
 from app.services.rtd_report_custom import build_rtd_test_report_file
 from app.services.session_service import get_runtime_session_payload
 from app.utils.enums import TaskStatus, TestType
+from app.utils.naming import normalize_target_line_name, sanitize_path_token
 
 settings = get_settings()
 
@@ -39,10 +40,10 @@ def generate_raw_file(
     if task.status != TaskStatus.DONE.value:
         raise HTTPException(status_code=409, detail="Task is not completed yet")
 
-    line_token = _sanitize_path_token(_normalize_target_line_name(task.target_name))
-    rule_token = _sanitize_path_token(_extract_rtd_rule_name(task)) if task.test_type == "RTD" else ""
+    line_token = sanitize_path_token(normalize_target_line_name(task.target_name))
+    rule_token = sanitize_path_token(_extract_rtd_rule_name(task)) if task.test_type == "RTD" else ""
     timestamp = (task.ended_at or task.started_at or task.requested_at or datetime.now()).strftime("%Y%m%d_%H%M%S")
-    task_dir = Path(settings.result_base_path) / task.test_type.lower() / "raw" / _sanitize_path_token(task.user_id)
+    task_dir = Path(settings.result_base_path) / task.test_type.lower() / "raw" / sanitize_path_token(task.user_id)
     task_dir.mkdir(parents=True, exist_ok=True)
 
     if (
@@ -193,7 +194,7 @@ def get_rtd_raw_rule_file_map(task: TestTask) -> dict[str, Path]:
 
     try:
         index_payload = json.loads(index_path.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return {}
 
     rule_files = index_payload.get("rule_files", {})
@@ -266,7 +267,7 @@ def generate_aggregate_rtd_summary_file(
         )
     )
 
-    report_dir = Path(settings.result_base_path) / "rtd" / "reports" / _sanitize_path_token(user_id)
+    report_dir = Path(settings.result_base_path) / "rtd" / "reports" / sanitize_path_token(user_id)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     business_unit_token = _build_business_unit_token(db, target_set)
     output_path = report_dir / f"{business_unit_token}-{timestamp}.xlsx"
@@ -323,9 +324,9 @@ def generate_aggregate_ezdfs_summary_file(
         if selected_rule:
             selected_rule_names = [selected_rule]
 
-    report_dir = Path(settings.result_base_path) / "ezdfs" / "reports" / _sanitize_path_token(user_id)
+    report_dir = Path(settings.result_base_path) / "ezdfs" / "reports" / sanitize_path_token(user_id)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = report_dir / f"{_sanitize_path_token(module_name)}-{timestamp}.xlsx"
+    output_path = report_dir / f"{sanitize_path_token(module_name)}-{timestamp}.xlsx"
     fallback_major_change_items = (
         runtime_payload.get("major_change_items")
         if isinstance(runtime_payload.get("major_change_items"), dict)
@@ -340,7 +341,7 @@ def generate_aggregate_ezdfs_summary_file(
 
 
 def _build_target_line_token(target_lines: list[str]) -> str:
-    normalized = [_sanitize_path_token(_normalize_target_line_name(line)) for line in target_lines if line]
+    normalized = [sanitize_path_token(normalize_target_line_name(line)) for line in target_lines if line]
     if not normalized:
         return "rtd_test_report"
 
@@ -353,12 +354,12 @@ def _build_target_line_token(target_lines: list[str]) -> str:
 def _build_business_unit_token(db: Session, target_lines: list[str]) -> str:
     business_units: list[str] = []
     for line in target_lines:
-        normalized_line = _normalize_target_line_name(line)
+        normalized_line = normalize_target_line_name(line)
         config = db.query(RtdConfig).filter(RtdConfig.line_name == normalized_line).first()
         if config and config.business_unit:
             business_units.append(config.business_unit)
 
-    normalized_units = list(dict.fromkeys(_sanitize_path_token(unit) for unit in business_units if unit))
+    normalized_units = list(dict.fromkeys(sanitize_path_token(unit) for unit in business_units if unit))
     if not normalized_units:
         return "business_unit"
     if len(normalized_units) == 1:
@@ -366,15 +367,9 @@ def _build_business_unit_token(db: Session, target_lines: list[str]) -> str:
     return f"{normalized_units[0]}__and_{len(normalized_units) - 1}_more"
 
 
-def _normalize_target_line_name(line_name: str) -> str:
-    if line_name.endswith("_TARGET"):
-        return line_name[: -len("_TARGET")]
-    return line_name
-
-
 def _build_summary_output_path(db: Session, task: TestTask) -> Path:
     """Build the per-task summary xlsx path under `results/<type>/reports/<user>/`."""
-    report_dir = Path(settings.result_base_path) / task.test_type.lower() / "reports" / _sanitize_path_token(task.user_id)
+    report_dir = Path(settings.result_base_path) / task.test_type.lower() / "reports" / sanitize_path_token(task.user_id)
     report_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = (task.ended_at or task.started_at or task.requested_at or datetime.now()).strftime("%Y%m%d_%H%M%S")
@@ -386,19 +381,14 @@ def _build_summary_name_token(db: Session, task: TestTask) -> str:
     """Build a human-readable summary filename token for one task."""
     if task.test_type == TestType.EZDFS.value:
         module_name = _extract_ezdfs_module_name(task) or task.target_name
-        return _sanitize_path_token(module_name)
+        return sanitize_path_token(module_name)
 
     if task.test_type == TestType.RTD.value:
-        line_name = _normalize_target_line_name(task.target_name)
+        line_name = normalize_target_line_name(task.target_name)
         config = db.query(RtdConfig).filter(RtdConfig.line_name == line_name).first()
-        return _sanitize_path_token(config.business_unit if config and config.business_unit else line_name)
+        return sanitize_path_token(config.business_unit if config and config.business_unit else line_name)
 
-    return _sanitize_path_token(task.target_name or task.test_type)
-
-
-def _sanitize_path_token(value: str) -> str:
-    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "").strip())
-    return sanitized.strip("._-") or "report"
+    return sanitize_path_token(task.target_name or task.test_type)
 
 
 def _write_rtd_rule_raw_files(
@@ -413,7 +403,7 @@ def _write_rtd_rule_raw_files(
     used_file_names: set[str] = set()
     index_payload: dict[str, dict[str, str] | str] = {
         "task_id": task.task_id,
-        "line_name": _normalize_target_line_name(task.target_name),
+        "line_name": normalize_target_line_name(task.target_name),
         "rule_files": {},
     }
 
@@ -434,7 +424,7 @@ def _write_rtd_rule_raw_files(
             f"target_name={task.target_name}",
             f"status={task.status}",
             f"requested_at={task.requested_at.isoformat()}",
-            f"line={_normalize_target_line_name(task.target_name)}",
+            f"line={normalize_target_line_name(task.target_name)}",
         ]
     )
     meta_path.write_text(meta_content, encoding="utf-8")
@@ -477,7 +467,7 @@ def _build_unique_rtd_rule_raw_file_name(
     rule_name: str,
     used_file_names: set[str],
 ) -> str:
-    base_name = f"{line_token}-{_sanitize_path_token(rule_name)}"
+    base_name = f"{line_token}-{sanitize_path_token(rule_name)}"
     file_name = f"{base_name}.txt"
     sequence = 2
     while file_name in used_file_names:
@@ -502,14 +492,14 @@ def _split_ezdfs_raw_output(raw_output: str) -> tuple[str, str]:
 def _build_ezdfs_raw_file_name(task: TestTask) -> str:
     """Build a stable ezDFS raw txt filename from the selected rule name."""
     rule_name = _extract_ezdfs_rule_name(task)
-    rule_token = _sanitize_path_token(rule_name) if rule_name else "raw"
+    rule_token = sanitize_path_token(rule_name) if rule_name else "raw"
     return f"{rule_token}.txt"
 
 
 def _extract_rtd_rule_name(task: TestTask) -> str:
     try:
         requested_payload = json.loads(task.requested_payload_json or "{}")
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return ""
 
     nested_payload = (
@@ -538,7 +528,7 @@ def _extract_ezdfs_rule_name(task: TestTask) -> str:
     """Extract the selected ezDFS rule name from one stored task payload."""
     try:
         requested_payload = json.loads(task.requested_payload_json or "{}")
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return ""
 
     nested_payload = (
@@ -557,7 +547,7 @@ def _extract_ezdfs_module_name(task: TestTask) -> str:
     """Extract the selected ezDFS module name from one stored task payload."""
     try:
         requested_payload = json.loads(task.requested_payload_json or "{}")
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return ""
 
     nested_payload = (

@@ -19,6 +19,7 @@ from app.services.rtd_execution_custom import (
     execute_test_action,
 )
 from app.utils.enums import ActionType, TaskStatus, TestType, TaskStep
+from app.utils.naming import normalize_target_line_name
 
 _EZDFS_QUEUE_CONDITION = threading.Condition()
 _EZDFS_MODULE_QUEUES: dict[str, list[str]] = {}
@@ -90,7 +91,7 @@ def _is_same_task_scope(
 
     try:
         existing_requested_payload = json.loads(existing_requested_payload_json or "{}")
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return False
 
     return _extract_rtd_primary_rule_name(requested_payload) == _extract_rtd_primary_rule_name(existing_requested_payload)
@@ -484,7 +485,7 @@ def _refresh_rtd_wait_message(task_id: str, queue_key: str, current_head_task_id
         if task is None or task.status != TaskStatus.PENDING.value:
             return
 
-        current_label = _get_rtd_task_display_name(db, current_head_task_id) or _normalize_rtd_target_name(task.target_name)
+        current_label = _get_rtd_task_display_name(db, current_head_task_id) or normalize_target_line_name(task.target_name)
         with _RTD_QUEUE_CONDITION:
             queue = _RTD_LINE_QUEUES.get(queue_key, [])
             position = queue.index(task_id) + 1 if task_id in queue else 0
@@ -501,14 +502,9 @@ def _refresh_rtd_wait_message(task_id: str, queue_key: str, current_head_task_id
 
 
 def _build_rtd_queue_key(user_id: str, target_name: str) -> str:
-    return f"{user_id}::{_normalize_rtd_target_name(target_name)}"
+    return f"{user_id}::{normalize_target_line_name(target_name)}"
 
 
-def _normalize_rtd_target_name(target_name: str) -> str:
-    normalized = str(target_name or "").strip()
-    if normalized.endswith("_TARGET"):
-        return normalized[: -len("_TARGET")]
-    return normalized
 
 
 def _get_rtd_task_display_name(db: Session, task_id: str) -> str:
@@ -524,13 +520,13 @@ def _get_rtd_task_display_name(db: Session, task_id: str) -> str:
     rule_name = _extract_rtd_task_primary_rule_name(task)
     if rule_name:
         return f"{action_label} {rule_name}"
-    return f"{action_label} {_normalize_rtd_target_name(task.target_name)}"
+    return f"{action_label} {normalize_target_line_name(task.target_name)}"
 
 
 def _extract_rtd_task_primary_rule_name(task: TestTask) -> str:
     try:
         requested_payload = json.loads(task.requested_payload_json or "{}")
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return ""
     return _extract_rtd_primary_rule_name(requested_payload)
 
@@ -542,7 +538,7 @@ def _get_ezdfs_task_rule_name(db: Session, task_id: str) -> str:
 
     try:
         payload = json.loads(task.requested_payload_json or "{}")
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return task.target_name
 
     return _extract_ezdfs_rule_name(payload) or task.target_name
@@ -619,7 +615,7 @@ def _filter_rtd_tasks_by_selected_rule(target_tasks: list[TestTask], selected_ru
 def _extract_rtd_task_rule_names(task: TestTask) -> set[str]:
     try:
         requested_payload = json.loads(task.requested_payload_json or "{}")
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return set()
 
     nested_payload = (

@@ -16,8 +16,10 @@ RTD catalog custom flow
 import re
 import shlex
 
+from app.core.exceptions import CatalogError, SSHConnectionError
 from app.models.entities import HostConfig
 from app.services.ssh_runtime import open_limited_ssh_client
+from app.utils.ssh_helpers import build_clean_bash_command
 
 
 def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[str]:
@@ -39,7 +41,7 @@ def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[s
     Customize this function if the offline environment uses a different
     listing command or directory layout.
     """
-    command = _build_clean_bash_command(
+    command = build_clean_bash_command(
         f"cd {shlex.quote(home_dir_path)} && find . -maxdepth 1 -type f -printf \"%f\\n\""
     )
 
@@ -49,11 +51,11 @@ def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[s
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
             error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SSH connection failed: {exc}") from exc
+    except (SSHConnectionError, OSError) as exc:
+        raise CatalogError(f"SSH connection failed: {exc}") from exc
 
     if exit_status != 0:
-        raise RuntimeError(error_output or "Failed to list remote files")
+        raise CatalogError(error_output or "Failed to list remote files")
 
     return [line.strip() for line in output.splitlines() if line.strip()]
 
@@ -135,7 +137,7 @@ def read_remote_source_text(host: HostConfig, remote_dir_path: str, file_name: s
     - runs `cat` through a clean bash shell
     - raises `RuntimeError` when SSH or remote read fails
     """
-    command = _build_clean_bash_command(
+    command = build_clean_bash_command(
     f"cd {shlex.quote(remote_dir_path)} && cat {shlex.quote(file_name)}"
     )
 
@@ -145,11 +147,11 @@ def read_remote_source_text(host: HostConfig, remote_dir_path: str, file_name: s
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
             error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SSH file read failed: {exc}") from exc
+    except (SSHConnectionError, OSError) as exc:
+        raise CatalogError(f"SSH file read failed: {exc}") from exc
 
     if exit_status != 0:
-        raise RuntimeError(error_output or f"Failed to read remote file: {file_name}")
+        raise CatalogError(error_output or f"Failed to read remote file: {file_name}")
 
     return output
 
@@ -170,8 +172,8 @@ def read_remote_source_bytes(host: HostConfig, remote_dir_path: str, file_name: 
                     return remote_file.read()
             finally:
                 sftp.close()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SFTP byte read failed: {exc}") from exc
+    except (SSHConnectionError, OSError) as exc:
+        raise CatalogError(f"SFTP byte read failed: {exc}") from exc
 
 
 def extract_macro_list(host: HostConfig, home_dir_path: str, rule_text: str, rule_name: str) -> list[str]:
@@ -220,11 +222,6 @@ def extract_macro_list(host: HostConfig, home_dir_path: str, rule_text: str, rul
         seen.add(item)
         result.append(item)
     return result
-
-
-def _build_clean_bash_command(command: str) -> str:
-    """Wrap a raw shell snippet so it runs in a minimal non-interactive bash."""
-    return f"bash --noprofile --norc -lc {shlex.quote(command)}"
 
 
 def _strip_report_suffix(version_name: str) -> str:

@@ -21,6 +21,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 
 from app.models.entities import TestTask
+from app.utils.naming import normalize_target_line_name
 
 
 def build_rtd_test_report_file(
@@ -63,6 +64,7 @@ def build_rtd_test_report_file(
     row_items: list[dict[str, str | list[str]]] = []
     for task in tasks:
         requested_payload = json.loads(task.requested_payload_json or "{}")
+        print(f"target : {task.target_name}")
         payload = (
             requested_payload.get("payload")
             if isinstance(requested_payload.get("payload"), dict)
@@ -143,7 +145,7 @@ def _build_rtd_report_rows(
         if isinstance(payload.get("major_change_items"), dict)
         else {}
     )
-    line_name = _normalize_target_line_name(task.target_name)
+    line_name = normalize_target_line_name(task.target_name)
     detail_by_rule = _extract_rtd_detail_by_rule(task.raw_result_path)
 
     rows: list[dict[str, str | list[str]]] = []
@@ -230,7 +232,7 @@ def _read_rtd_indexed_rule_details(meta_path: Path) -> dict[str, str]:
 
     try:
         index_payload = json.loads(index_path.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError, OSError):
         return {}
 
     rule_files = index_payload.get("rule_files", {})
@@ -261,7 +263,7 @@ def _collect_major_change_items(
     for task in tasks:
         try:
             requested_payload = json.loads(task.requested_payload_json or "{}")
-        except Exception:  # noqa: BLE001
+        except (json.JSONDecodeError, ValueError):
             continue
         payload = (
             requested_payload.get("payload")
@@ -284,14 +286,6 @@ def _collect_major_change_items(
         if normalized_rule and normalized_text:
             merged[normalized_rule] = normalized_text
     return merged
-
-
-def _normalize_target_line_name(line_name: str) -> str:
-    """Strip `_TARGET` suffix so report rows use the logical RTD line name."""
-    normalized = str(line_name or "").strip()
-    if normalized.endswith("_TARGET"):
-        return normalized[: -len("_TARGET")]
-    return normalized
 
 
 def _style_rtd_report_sheet(sheet) -> None:

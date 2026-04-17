@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import shlex
 import threading
 from contextlib import contextmanager
 from datetime import datetime
@@ -9,7 +8,9 @@ from pathlib import Path
 from typing import Iterator
 
 from app.core.config import get_settings
+from app.core.exceptions import SSHConnectionError
 from app.models.entities import HostConfig
+from app.utils.ssh_helpers import build_clean_bash_command
 
 SSH_CONNECT_TIMEOUT = 5
 SSH_AUTH_TIMEOUT = 5
@@ -93,7 +94,7 @@ def _get_host_semaphore(host: HostConfig) -> threading.BoundedSemaphore:
 
 
 def _probe_remote_parallel_limit(host: HostConfig) -> int:
-    command = _build_clean_bash_command(
+    command = build_clean_bash_command(
         "if [ -x /usr/sbin/sshd ]; then "
         "/usr/sbin/sshd -T 2>/dev/null | awk '/^maxstartups /{print $2; exit}'; "
         "elif command -v sshd >/dev/null 2>&1; then "
@@ -148,9 +149,9 @@ def _open_raw_ssh_client(host: HostConfig):
             auth_timeout=SSH_AUTH_TIMEOUT,
             banner_timeout=SSH_BANNER_TIMEOUT,
         )
-    except Exception as exc:  # noqa: BLE001
+    except (paramiko.SSHException, OSError) as exc:
         client.close()
-        raise RuntimeError(f"SSH connection failed for host={host.name}: {exc}") from exc
+        raise SSHConnectionError(f"SSH connection failed for host={host.name}: {exc}") from exc
     return client
 
 
@@ -161,10 +162,6 @@ def _append_admin_alert(message: str) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with log_path.open("a", encoding="utf-8") as log_file:
         log_file.write(f"{timestamp} {message}\n")
-
-
-def _build_clean_bash_command(command: str) -> str:
-    return f"bash --noprofile --norc -lc {shlex.quote(command)}"
 
 
 def _update_host_limit_cache(host_name: str, limit: int, source: str) -> None:

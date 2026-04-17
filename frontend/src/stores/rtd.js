@@ -23,6 +23,8 @@ export const useRtdStore = defineStore('rtd', () => {
   const tasks = ref([])
   const monitorItems = ref([])
   const copyVisibilityMap = ref({})
+  const compileVisibilityMap = ref({})
+  const testVisibilityMap = ref({})
   const svnUpload = ref({})
 
   const businessUnits = ref([])
@@ -51,6 +53,8 @@ export const useRtdStore = defineStore('rtd', () => {
     target_lines: targetLines.value,
     monitor_rule_selection: monitorRuleSelection.value,
     active_task_ids: tasks.value.map((task) => task.task_id),
+    compile_visibility_map: compileVisibilityMap.value,
+    test_visibility_map: testVisibilityMap.value,
     svn_upload: svnUpload.value,
   }))
 
@@ -185,6 +189,8 @@ export const useRtdStore = defineStore('rtd', () => {
     }
     targetLines.value = session.target_lines || []
     monitorRuleSelection.value = session.monitor_rule_selection || {}
+    compileVisibilityMap.value = session.compile_visibility_map || {}
+    testVisibilityMap.value = session.test_visibility_map || {}
     svnUpload.value = session.svn_upload || {}
     syncMonitorRuleSelection()
 
@@ -202,6 +208,9 @@ export const useRtdStore = defineStore('rtd', () => {
     macroReview.value = { searched: false, old_macros: [], new_macros: [], rule_macro_map: {}, has_diff: false, error: '' }
     targetLines.value = []
     monitorRuleSelection.value = {}
+    copyVisibilityMap.value = {}
+    compileVisibilityMap.value = {}
+    testVisibilityMap.value = {}
     svnUpload.value = {}
     lines.value = []
     rules.value = []
@@ -216,6 +225,9 @@ export const useRtdStore = defineStore('rtd', () => {
     macroReview.value = { searched: false, old_macros: [], new_macros: [], rule_macro_map: {}, has_diff: false, error: '' }
     targetLines.value = []
     monitorRuleSelection.value = {}
+    copyVisibilityMap.value = {}
+    compileVisibilityMap.value = {}
+    testVisibilityMap.value = {}
     svnUpload.value = {}
     rules.value = []
     ruleVersions.value = []
@@ -283,6 +295,16 @@ export const useRtdStore = defineStore('rtd', () => {
         copyVisibilityMap.value[line] = true
       }
     }
+    if (action === 'compile') {
+      for (const line of lines) {
+        compileVisibilityMap.value[line] = true
+      }
+    }
+    if (action === 'test' || action === 'retest') {
+      for (const line of lines) {
+        testVisibilityMap.value[line] = true
+      }
+    }
     await saveSession()
     return data.items
   }
@@ -297,6 +319,8 @@ export const useRtdStore = defineStore('rtd', () => {
       return
     }
 
+    const idleAction = { status: 'IDLE', status_text: '이력 없음', message: '-' }
+
     monitorItems.value = (
       await apiGet('/api/rtd/monitor', {
         params: {
@@ -304,27 +328,33 @@ export const useRtdStore = defineStore('rtd', () => {
         },
       })
     ).items.map((item) => {
-      const copyStateVisible = copyVisibilityMap.value[item.target_name]
-      const copyStatus = item.copy?.status
+      const result = { ...item }
 
+      // copy visibility filtering
+      const copyStatus = item.copy?.status
       if (copyStatus === 'RUNNING' || copyStatus === 'PENDING') {
         copyVisibilityMap.value[item.target_name] = true
-        return item
+      } else if (!((copyStatus === 'DONE' || copyStatus === 'FAIL') && copyVisibilityMap.value[item.target_name])) {
+        result.copy = { ...(item.copy || {}), ...idleAction }
       }
 
-      if ((copyStatus === 'DONE' || copyStatus === 'FAIL') && copyStateVisible) {
-        return item
+      // compile visibility filtering
+      const compileStatus = item.compile?.status
+      if (compileStatus === 'RUNNING' || compileStatus === 'PENDING') {
+        compileVisibilityMap.value[item.target_name] = true
+      } else if (!((compileStatus === 'DONE' || compileStatus === 'FAIL') && compileVisibilityMap.value[item.target_name])) {
+        result.compile = { ...(item.compile || {}), ...idleAction }
       }
 
-      return {
-        ...item,
-        copy: {
-          ...(item.copy || {}),
-          status: 'IDLE',
-          status_text: '이력 없음',
-          message: '-',
-        },
+      // test visibility filtering
+      const testStatus = item.test?.status
+      if (testStatus === 'RUNNING' || testStatus === 'PENDING') {
+        testVisibilityMap.value[item.target_name] = true
+      } else if (!((testStatus === 'DONE' || testStatus === 'FAIL') && testVisibilityMap.value[item.target_name])) {
+        result.test = { ...(item.test || {}), ...idleAction }
       }
+
+      return result
     })
   }
 
@@ -408,6 +438,8 @@ export const useRtdStore = defineStore('rtd', () => {
     monitorRuleSelection.value = {}
     monitorItems.value = []
     copyVisibilityMap.value = {}
+    compileVisibilityMap.value = {}
+    testVisibilityMap.value = {}
     lines.value = []
     rules.value = []
     ruleVersions.value = []

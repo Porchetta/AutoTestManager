@@ -19,8 +19,10 @@ import posixpath
 import re
 import shlex
 
+from app.core.exceptions import CatalogError, SSHConnectionError
 from app.models.entities import HostConfig
 from app.services.ssh_runtime import open_limited_ssh_client
+from app.utils.ssh_helpers import build_clean_bash_command
 
 
 def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[str]:
@@ -40,7 +42,7 @@ def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[s
     - ignores hidden files
     """
     deployed_dir = _deployed_dir_from_home(home_dir_path)
-    command = _build_clean_bash_command(
+    command = build_clean_bash_command(
         f"cd {shlex.quote(deployed_dir)} && find . -maxdepth 1 -type f -name '*.rul' -printf \"%f\\n\""
     )
 
@@ -50,11 +52,11 @@ def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[s
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
             error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SSH connection failed: {exc}") from exc
+    except (SSHConnectionError, OSError) as exc:
+        raise CatalogError(f"SSH connection failed: {exc}") from exc
 
     if exit_status != 0:
-        raise RuntimeError(error_output or "Failed to list ezDFS rule files")
+        raise CatalogError(error_output or "Failed to list ezDFS rule files")
 
     return [line.strip() for line in output.splitlines() if line.strip() and not line.startswith(".")]
 
@@ -76,7 +78,7 @@ def fetch_backup_rule_source_file_names(host: HostConfig, home_dir_path: str) ->
     - used to find old-version candidates for comparison
     """
     backup_dir = _backup_dir_from_home(home_dir_path)
-    command = _build_clean_bash_command(
+    command = build_clean_bash_command(
         f"cd {shlex.quote(backup_dir)} && find . -maxdepth 1 -type f -name '*.rul' -printf \"%f\\n\""
     )
 
@@ -86,11 +88,11 @@ def fetch_backup_rule_source_file_names(host: HostConfig, home_dir_path: str) ->
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
             error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SSH connection failed: {exc}") from exc
+    except (SSHConnectionError, OSError) as exc:
+        raise CatalogError(f"SSH connection failed: {exc}") from exc
 
     if exit_status != 0:
-        raise RuntimeError(error_output or "Failed to list ezDFS backup rule files")
+        raise CatalogError(error_output or "Failed to list ezDFS backup rule files")
 
     return [line.strip() for line in output.splitlines() if line.strip() and not line.startswith(".")]
 
@@ -164,7 +166,7 @@ def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) 
     - str: Full rule file text.
     """
     deployed_dir = _deployed_dir_from_home(home_dir_path)
-    command = _build_clean_bash_command(
+    command = build_clean_bash_command(
         f"cd {shlex.quote(deployed_dir)} && cat {shlex.quote(file_name)}"
     )
 
@@ -174,8 +176,8 @@ def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) 
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
             error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SSH file read failed: {exc}") from exc
+    except (SSHConnectionError, OSError) as exc:
+        raise CatalogError(f"SSH file read failed: {exc}") from exc
 
     if exit_status != 0:
         raise RuntimeError(error_output or f"Failed to read ezDFS rule file: {file_name}")
@@ -196,8 +198,8 @@ def read_rule_source_bytes(host: HostConfig, home_dir_path: str, file_name: str)
                     return remote_file.read()
             finally:
                 sftp.close()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SFTP byte read failed: {exc}") from exc
+    except (SSHConnectionError, OSError) as exc:
+        raise CatalogError(f"SFTP byte read failed: {exc}") from exc
 
 
 def extract_sub_rule_list_from_rule_text(rule_text: str, rule_name: str) -> list[str]:
@@ -298,18 +300,13 @@ def resolve_recursive_sub_rule_list(
 
             try:
                 child_rule_text = read_rule_source_text(host, home_dir_path, child_file_name)
-            except Exception:  # noqa: BLE001
+            except (CatalogError, OSError):
                 continue
 
             walk_source_text(child_rule_text)
 
     walk_source_text(root_rule_text)
     return resolved
-
-
-def _build_clean_bash_command(command: str) -> str:
-    """Wrap a shell snippet so it runs in a minimal non-interactive bash."""
-    return f"bash --noprofile --norc -lc {shlex.quote(command)}"
 
 
 def _deployed_dir_from_home(home_dir_path: str) -> str:

@@ -21,9 +21,8 @@ from app.services.rtd_catalog_custom import (
     read_rule_source_text,
 )
 from app.services.session_service import get_runtime_session_payload, upsert_runtime_session
+from app.utils.constants import RULE_ERROR_ITEM, TARGET_SUFFIX
 from app.utils.enums import TestType
-
-RULE_ERROR_ITEM = "error"
 
 
 def get_business_units(db: Session, current_user: User) -> list[str]:
@@ -175,7 +174,7 @@ def _merge_macros_in_order(primary_macros: list[str], secondary_macros: list[str
 
 def get_target_lines_by_business_unit(db: Session, business_unit: str, current_user: User) -> list[str]:
     lines = get_lines_by_business_unit(db, business_unit, current_user)
-    return [f"{line}_TARGET" for line in lines]
+    return [f"{line}{TARGET_SUFFIX}" for line in lines]
 
 
 def get_ezdfs_modules(db: Session, current_user: User) -> list[str]:
@@ -255,7 +254,7 @@ def _get_or_fetch_rtd_catalog(db: Session, current_user: User, line_name: str) -
 
     try:
         catalog = _fetch_rtd_catalog_over_ssh(db, line_name)
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, OSError) as exc:
         catalog = {
             "line_name": line_name,
             "files": [],
@@ -288,7 +287,7 @@ def _get_or_fetch_ezdfs_catalog(
 
     try:
         catalog = _fetch_ezdfs_catalog_over_ssh(db, module_name)
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, OSError) as exc:
         catalog = {
             "module_name": module_name,
             "files": [],
@@ -338,7 +337,7 @@ def _fetch_ezdfs_catalog_over_ssh(db: Session, module_name: str) -> dict:
     try:
         backup_remote_files = fetch_ezdfs_backup_rule_source_file_names(host, config.home_dir_path)
         backup_catalog_files = parse_ezdfs_rule_catalog_entries(backup_remote_files)
-    except Exception:  # noqa: BLE001
+    except (OSError, RuntimeError):
         backup_catalog_files = []
     files_with_old_version = [
         {

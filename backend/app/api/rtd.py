@@ -43,22 +43,14 @@ from app.services.task_service import (
     serialize_task,
 )
 from app.utils.enums import ActionType, TaskStep, TestType
+from app.utils.naming import normalize_target_line_name, sanitize_path_token
 
 router = APIRouter(prefix="/api/rtd", tags=["rtd"])
 
 
-def _normalize_target_line_name(line_name: str) -> str:
-    return str(line_name or "").replace("_TARGET", "")
-
-
-def _sanitize_download_token(value: str) -> str:
-    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "").strip())
-    return sanitized.strip("._-") or "report"
-
-
 def _build_rtd_raw_txt_name(task, rule_name: str) -> str:
-    line_name = _sanitize_download_token(_normalize_target_line_name(task.target_name))
-    return f"{line_name}-{_sanitize_download_token(rule_name)}.txt"
+    line_name = sanitize_path_token(normalize_target_line_name(task.target_name))
+    return f"{line_name}-{sanitize_path_token(rule_name)}.txt"
 
 
 def _build_rtd_task_requests(
@@ -68,7 +60,7 @@ def _build_rtd_task_requests(
     request_payload = payload.model_dump()
     sorted_target_lines = sorted(
         payload.target_lines,
-        key=lambda item: _normalize_target_line_name(str(item or "")).lower(),
+        key=lambda item: normalize_target_line_name(str(item or "")).lower(),
     )
     return [(target_line, request_payload) for target_line in sorted_target_lines]
 
@@ -108,7 +100,7 @@ def compare_macros(
     try:
         result = compare_macros_by_rule_targets(db, current_user, payload.line_name, payload.selected_rule_targets)
         result["searched"] = True
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, OSError, RuntimeError) as exc:
         result = {
             "searched": True,
             "old_macros": ["error"],
@@ -206,7 +198,7 @@ def _create_rtd_tasks(
         target_lines = [
             target_line
             for target_line in payload.target_lines
-            if _normalize_target_line_name(target_line) != selected_line_name
+            if normalize_target_line_name(target_line) != selected_line_name
         ]
 
     if not target_lines:
@@ -345,7 +337,7 @@ def download_raw(
         for rule_name, content in sections.items():
             archive.writestr(_build_rtd_raw_txt_name(task, rule_name), content)
     zip_buffer.seek(0)
-    zip_name = f"{_sanitize_download_token(_normalize_target_line_name(task.target_name))}-raw.zip"
+    zip_name = f"{sanitize_path_token(normalize_target_line_name(task.target_name))}-raw.zip"
     return Response(
         content=zip_buffer.getvalue(),
         media_type="application/zip",

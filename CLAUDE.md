@@ -1,137 +1,297 @@
-# CLAUDE.md
+# CLAUDE.md — AutoTestManager
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Project Purpose
 
-## 프로젝트 개요
+AutoTestManager is an internal web application for managing and executing
+automated tests against RTD (Rule Test Dispatcher) and ezDFS rule systems.
+It runs in an **offline-capable** enterprise environment, deployed via Docker
+images. The application enables MSS developers to:
 
-RTD 및 ezDFS 테스트 흐름을 웹에서 관리하는 `Vue 3 + FastAPI` 기반 테스트 매니저.
-개발 환경은 `Windows + WSL` 기준.
+- Select business units, lines, rules, and versions through a guided wizard
+- Copy rule files to target servers, compile them, and run tests via SSH
+- Monitor test execution across multiple target lines in parallel
+- Generate Excel summary reports and download raw test output
 
-## 명령어
+## Architecture Overview
+
+```
+Frontend (Vue 3 SPA)        Backend (FastAPI)        Remote Hosts
+  +-----------+            +-----------+           +----------+
+  | Vue 3     |  REST/JSON | FastAPI   |    SSH    | RTD/ezDFS|
+  | Pinia     | ---------> | SQLAlchemy| --------> | servers  |
+  | Vite      |            | SQLite    |  Paramiko |          |
+  +-----------+            +-----------+           +----------+
+  Port 4203                Port 10223
+```
+
+### Frontend Stack
+- Vue 3 with Composition API (`<script setup>`)
+- Pinia for state management (setup function syntax)
+- Vue Router with JWT-guarded navigation
+- Axios with centralized interceptors (`api.js`)
+- Custom CSS design system (`style.css`) with CSS custom properties
+  and light/dark theme toggle
+
+### Backend Stack
+- FastAPI with router-based API modules under `/api/`
+- SQLAlchemy 2.0 with `Mapped[type]` + `mapped_column()` pattern
+- SQLite database at `backend/data/autotestmanager.db`
+- Pydantic v2 for request/response validation
+- JWT auth via python-jose, passwords hashed with passlib+bcrypt
+- Paramiko for SSH connections to remote test servers
+- openpyxl for Excel report generation
+- Background tasks run in daemon threads (not Celery/RQ)
+
+### Deployment
+- Docker images built on online machine, transferred via tar.gz
+- Dev mode: uvicorn --reload + Vite HMR
+- Prod mode: nginx serves static frontend, proxies `/api/*` to backend
+
+## Development Setup
 
 ### Backend
-
 ```bash
 cd backend
 chmod +x dev-setup.sh run-dev.sh
-./dev-setup.sh      # 최초 설정 (.venv 생성, requirements 설치, .env 복사)
-./run-dev.sh        # uvicorn으로 실행 (포트 10223, --reload)
+./dev-setup.sh      # Creates .venv, installs requirements.txt
+./run-dev.sh        # Starts uvicorn on port 10223
 ```
 
-직접 실행:
-```bash
-cd backend
-source .venv/bin/activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 10223
-```
+Default admin: `admin` / `admin1234`
 
-- API: `http://127.0.0.1:10223`
-- Swagger: `http://127.0.0.1:10223/docs`
-- Health: `http://127.0.0.1:10223/health`
-- 기본 관리자: `admin` / `admin1234`
+API docs: http://127.0.0.1:10223/docs
 
 ### Frontend
-
 ```bash
 cd frontend
-cp .env.example .env   # 최초 1회
+cp .env.example .env
 npm install
-npm run dev            # 포트 4203
-npm run build          # 프로덕션 빌드
-npm run preview        # 빌드 결과 미리보기 (포트 4173)
+npm run dev         # Starts Vite on port 4203
 ```
 
-- Frontend: `http://127.0.0.1:4203`
-- 환경 변수: `VITE_API_BASE_URL=http://127.0.0.1:10223`
+Environment: `VITE_API_BASE_URL=http://127.0.0.1:10223`
 
-## 아키텍처
+## Project Structure
 
-### 전체 구성
-
+### Backend
 ```
-frontend/   Vue 3 + Vite + Pinia SPA
-backend/    FastAPI + SQLAlchemy + SQLite API 서버
-docs/       Front.md, Back.md, plan.md (구현 기준 문서)
+backend/app/
+  main.py               # FastAPI app, lifespan, CORS, router registration
+  api/                   # Route handlers (thin controllers)
+    auth.py              # Login, signup, password change
+    admin.py             # User/Host/RTD/ezDFS config CRUD (admin-only)
+    rtd.py               # RTD catalog, session, execution, download APIs
+    ezdfs.py             # ezDFS catalog, session, execution, download APIs
+    mypage.py            # User history, result downloads
+    deps.py              # FastAPI dependencies (get_db, get_current_user)
+  core/
+    config.py            # Settings from .env via pydantic-settings
+    security.py          # JWT encode/decode, password hashing
+    responses.py         # success_response() wrapper
+  db/
+    session.py           # Engine, SessionLocal, Base, init_db, legacy migrations
+  models/
+    entities.py          # All SQLAlchemy models (User, HostConfig, RtdConfig,
+                         #   EzdfsConfig, TestTask, RuntimeSession, DashboardLike)
+  schemas/               # Pydantic request/response schemas
+  services/
+    task_service.py      # Task CRUD, queue management, background worker threads
+    catalog_service.py   # RTD/ezDFS catalog orchestration (calls *_custom.py)
+    file_service.py      # Raw file generation, summary files, download paths
+    session_service.py   # Runtime session CRUD (per-user, per-test-type)
+    ssh_runtime.py       # SSH connection pool, parallel limit detection
+    bootstrap.py         # Default admin seed, storage directory creation
+    svn_upload_custom.py # SVN checkin flow
+    --- Custom implementation files (see below) ---
+    rtd_catalog_custom.py
+    rtd_execution_custom.py
+    rtd_report_custom.py
+    ezdfs_catalog_custom.py
+    ezdfs_execution_custom.py
+    ezdfs_report_custom.py
+  utils/
+    enums.py             # TestType, ActionType, TaskStatus, TaskStep
 ```
 
-데이터 저장:
-- DB: `backend/data/autotestmanager.db`
-- 결과 파일: `backend/data/results/`
-- 관리자 알람 로그: `backend/data/logs/admin_alert.log`
+### Frontend
+```
+frontend/src/
+  api.js                 # Axios instance, interceptors, apiGet/Post/Put/Delete
+  main.js                # App bootstrap
+  App.vue                # Root component (global toasts, modals)
+  style.css              # Full design system (CSS tokens + component styles)
+  router/index.js        # Route definitions and navigation guards
+  stores/
+    auth.js              # JWT token, user info, localStorage persistence
+    rtd.js               # RTD wizard state, session save/restore, task polling
+    ezdfs.js             # ezDFS wizard state, session save/restore, task polling
+    ui.js                # Global loading, error, confirm dialog
+    theme.js             # Dark/light theme toggle
+  views/
+    LoginView.vue        # Login form
+    SignupView.vue        # Registration form
+    DashboardView.vue    # Overview dashboard
+    RTDView.vue          # RTD 6-step test wizard
+    EzDFSView.vue        # ezDFS 3-step test wizard
+    AdminView.vue        # Admin CRUD panels (4 tabs)
+    MyPageView.vue       # Password change + result history
+  layouts/
+    MainLayout.vue       # Sidebar + header + content shell
+  components/
+    SidebarNav.vue       # Navigation sidebar
+    StatusBadge.vue      # Status indicator component
+```
 
-### Backend 구조 (`backend/app/`)
+## Custom Implementation Pattern (*_custom.py)
 
-| 디렉토리 | 역할 |
-|---|---|
-| `api/` | FastAPI 라우터 (`auth`, `admin`, `rtd`, `ezdfs`, `mypage`) |
-| `core/` | 설정(`config.py`), JWT, 보안, 공통 예외 |
-| `db/` | SQLAlchemy 세션, 베이스, `init_db()` |
-| `models/` | DB 엔티티 |
-| `schemas/` | Pydantic 요청/응답 스키마 |
-| `services/` | 비즈니스 로직, 실행 훅, 파일 생성 |
-| `utils/` | enum (`ActionType`, `TaskStatus`, `TestType`, `TaskStep`) |
+The `*_custom.py` files are the primary extension points for offline
+environment adaptation. They follow a three-layer pattern for each test
+system (RTD and ezDFS):
 
-**장시간 작업 처리**: 실행 API는 즉시 `task_id`를 반환하고 백그라운드 워커 스레드가 상태를 갱신한다. RTD의 COPY/COMPILE/TEST/RETEST는 타겟별 병렬 실행.
+### 1. Catalog Custom
+`rtd_catalog_custom.py`, `ezdfs_catalog_custom.py`
+- Discover and parse rule files from remote servers via SSH
+- Key functions: `fetch_rule_source_file_names()`, `parse_rule_catalog_entries()`,
+  `read_rule_source_text()`, `extract_macro_list()` (RTD) /
+  `extract_sub_rule_list_from_rule_text()` (ezDFS)
 
-**세션 복원**: RTD / ezDFS step 상태를 DB에 저장. 사용자당 테스트 타입별 1개 세션만 유지.
+### 2. Execution Custom
+`rtd_execution_custom.py`, `ezdfs_execution_custom.py`
+- Run copy, compile, and test commands on remote hosts
+- Key functions: `execute_copy_action()`, `execute_compile_action()`,
+  `execute_test_action()` / `execute_ezdfs_test_action()`
 
-**API 응답 포맷**: 성공 시 `{"success": true, "data": {...}}`, 파일 다운로드 API만 파일 응답 사용. 모든 prefix는 `/api`.
+### 3. Report Custom
+`rtd_report_custom.py`, `ezdfs_report_custom.py`
+- Generate Excel reports from completed test tasks
+- Key functions: `build_rtd_test_report_file()` / `build_ezdfs_test_report_file()`
 
-### Backend 커스텀 포인트 (`backend/app/services/`)
+### Call Chain
+```
+API Route -> catalog_service.py -> *_catalog_custom.py -> ssh_runtime.py
+API Route -> task_service.py    -> *_execution_custom.py -> ssh_runtime.py
+API Route -> file_service.py    -> *_report_custom.py
+```
 
-오프라인 환경 적용 시 수정할 파일:
+**Rule**: `catalog_service.py`, `task_service.py`, and `file_service.py`
+are orchestrators. They must NOT contain SSH commands or file-format
+parsing. That logic belongs in the `*_custom.py` files.
 
-| 파일 | 커스텀 대상 |
-|---|---|
-| `rtd_catalog_custom.py` | Rule 파일 목록 조회, 파일명 파싱, `.rule` 읽기, Macro 추출 |
-| `rtd_execution_custom.py` | 복사, 컴파일, 테스트/재테스트 실행 명령 |
-| `rtd_report_custom.py` | 라인별 집계 결과서(`.xlsx`) 생성 |
-| `ezdfs_catalog_custom.py` | ezDFS Rule/Module 목록 조회 |
-| `ezdfs_execution_custom.py` | ezDFS 테스트 실행 (현재 mock) |
-| `ezdfs_report_custom.py` | ezDFS 결과서 생성 (현재 mock) |
+## Coding Conventions
 
-RTD 기본 구현 전제:
-- Rule 파일: 개발 라인 `home_dir_path`에 위치
-- Macro 파일: `../Macro` 상대 경로
-- 원격 명령: `bash --noprofile --norc -lc ...`
-- 컴파일: `./atm_compiler {rule_name} {line_name}`
-- 테스트: `./atm_testscript {rule_name} {line_name}`
+### Backend
+- All modules start with `from __future__ import annotations`
+- SQLAlchemy uses `Mapped[type]` with `mapped_column()` (SA 2.0 style)
+- Pydantic v2 with `model_config = ConfigDict(from_attributes=True)`
+- API responses wrapped in `success_response({"key": value})`
+- Error responses use `HTTPException` with structured detail dict:
+  `{"success": False, "error": {"code": "...", "message": "...", "detail": {...}}}`
+- SSH commands run through `bash --noprofile --norc -lc <quoted-cmd>`
+- Timestamps are always UTC via `datetime.now(timezone.utc)`
+- String enums in `utils/enums.py` for TestType, ActionType, TaskStatus, TaskStep
 
-### Frontend 구조 (`frontend/src/`)
+### Frontend
+- Vue 3 `<script setup>` with Composition API exclusively
+- Pinia stores use setup function syntax (not options API)
+- API calls via `apiGet()`, `apiPost()`, `apiPut()`, `apiDelete()` from `api.js`
+- File downloads via `downloadFile()` which handles Content-Disposition
+- Session persistence: stores save state to backend on each step change
+- Polling: `setInterval` in view `onMounted`, cleared in `onBeforeUnmount`
+- UI labels are in Korean; do not change existing labels without approval
+- Theme: CSS custom properties with `:root` (light) and `[data-theme="dark"]`
+- No TypeScript, no component library, no form validation library
 
-| 파일/디렉토리 | 역할 |
-|---|---|
-| `api.js` | Axios 인스턴스, JWT 인터셉터, `apiGet/apiPost/apiPut/apiDelete` 헬퍼 |
-| `stores/` | Pinia 스토어 (`auth`, `rtd`, `ezdfs`, `theme`, `ui`) |
-| `views/` | 페이지 컴포넌트 (`RTDView`, `EzDFSView`, `AdminView`, `MyPageView`, …) |
-| `components/` | 공통 컴포넌트 (`SidebarNav`, `StatusBadge`) |
-| `layouts/` | `MainLayout.vue` (Sidebar + 헤더 + 라우터 뷰) |
-| `router/` | Vue Router 설정, 인증/관리자 가드 |
-| `style.css` | CSS 토큰 기반 디자인 시스템 (라이트/다크 이중 테마) |
+## Critical Patterns to Preserve
 
-**인증 흐름**: 로그인 성공 → JWT + 사용자 정보를 `localStorage`(`atm-auth`) 저장 → Axios 인터셉터에서 `Authorization: Bearer` 자동 첨부 → 401 수신 시 로컬 로그아웃 후 `/login` 이동.
+1. **Session restoration**: Users expect page refresh to restore their
+   exact wizard state. The `RuntimeSession` table stores per-user,
+   per-test-type JSON. Both frontend stores and backend `session_service`
+   participate. Breaking this flow loses user work.
 
-**API 클라이언트**: `api.js`의 `apiGet/apiPost` 등은 `response.data.data`를 바로 반환. 401 자동 처리, 에러 시 전역 Toast(`uiStore.setError`) 호출.
+2. **Custom file boundary**: All SSH commands and file-format parsing
+   must stay in `*_custom.py` files. The orchestrator services
+   (`catalog_service`, `task_service`, `file_service`) must never
+   import `paramiko` or contain raw SSH logic.
 
-**디자인 시스템**: `style.css`에 CSS 토큰 정의. teal 계열 `--accent` 주요 액센트. `button-primary/secondary/ghost/danger` 클래스, `.status-badge[data-status]` 상태 뱃지 사용.
+3. **Background task threading**: Tasks run in daemon threads, not async.
+   The worker function in `task_service.py` opens its own DB session.
+   Do not use the request-scoped session inside background threads.
 
-### 라우팅
+4. **Queue serialization**: RTD tasks for the same user+line are queued
+   via in-memory queues with `threading.Condition`. ezDFS tasks queue
+   per module. This prevents SSH connection flooding on remote hosts.
 
-- `/login`, `/signup` — 비인증 전용
-- `/` — 대시보드 (인증 필요)
-- `/rtd` — RTD Test Manager (인증 필요)
-- `/ezdfs` — ezDFS Test (인증 필요)
-- `/admin` — Admin (관리자 권한 필요)
-- `/mypage` — My Page (인증 필요)
+5. **Target line naming**: RTD target lines use `{line_name}_TARGET`
+   suffix to distinguish from the dev line. The
+   `_normalize_target_line_name()` function strips this suffix.
 
-## 구현 현황
+6. **Offline deployment**: No external CDN, no npm registry access at
+   runtime. Docker images carry all dependencies.
 
-- **RTD**: SSH 기반 조회/실행 구조 완성. 6단계 매니저(사업부 → 개발 라인 → Rule → Macro → 타겟 → 실행).
-- **ezDFS**: 현재 mock/단순 생성 로직. test/retest/raw/summary 흐름은 유지하되 추후 실제 연동으로 교체.
-- 결과서 최종 운영 포맷 미확정 (현재 `.xlsx` 단순 생성).
+## Data Storage
 
-## 참조 문서
+- SQLite DB: `backend/data/autotestmanager.db`
+- Result files: `backend/data/results/`
+  - RTD raw: `rtd/raw/{user_id}/` (txt files + index.json)
+  - RTD reports: `rtd/reports/{user_id}/`
+  - ezDFS raw: `ezdfs/raw/{user_id}/`
+  - ezDFS reports: `ezdfs/reports/{user_id}/`
+- Admin alerts: `backend/data/logs/admin_alert.log`
 
-- `docs/Front.md` — 프론트 구현 기준 (컴포넌트별 상세 동작 기준)
-- `docs/Back.md` — 백엔드 구현 기준 (API 계약, 정책 우선 기준)
-- `docs/plan.md` — 상위 기획 문서
+## Existing Documentation
+
+- `docs/plan.md` — Feature requirements (Korean)
+- `docs/Back.md` — Backend API contract and implementation specs (Korean)
+- `docs/Front.md` — Frontend design specs (Korean)
+
+---
+
+## Known Duplications
+
+These duplicated functions and patterns are confirmed across the codebase:
+
+| Function | Duplicated In |
+|----------|---------------|
+| `_build_clean_bash_command()` | `ssh_runtime.py`, `rtd_catalog_custom.py`, `rtd_execution_custom.py`, `ezdfs_catalog_custom.py`, `ezdfs_execution_custom.py`, `svn_upload_custom.py` (6 files) |
+| `_normalize_target_line_name()` | `api/rtd.py`, `file_service.py`, `rtd_report_custom.py`, `rtd_execution_custom.py` (4 files) |
+| `_extract_session_payload()` | `rtd_execution_custom.py`, `ezdfs_execution_custom.py` (2 files) |
+| `_run_remote_command()` | `rtd_execution_custom.py`, `ezdfs_execution_custom.py` (2 files) |
+| `_TARGET` magic string | 9 files across frontend and backend |
+| `except Exception` broad catches | 36 occurrences across 14 backend files |
+
+---
+
+## Refactoring Roadmap
+
+### Phase 1 — Quick Wins (low risk, incremental)
+
+| # | Item | Description |
+|---|------|-------------|
+| 1.1 | Extract duplicated utilities | Create `utils/ssh_helpers.py` (bash command builder, remote command runner), `utils/naming.py` (target line normalization, path sanitization), `utils/report_helpers.py` (shared report styling/merge logic) |
+| 1.2 | Extract magic strings | Move `_TARGET`, `__ALL__`, bash shell prefix, etc. into `utils/constants.py` |
+| 1.3 | Custom exception classes | Create `core/exceptions.py` with `SSHConnectionError`, `RemoteCommandError`, `ConfigNotFoundError`, `TaskConflictError`, `CatalogError`. Add FastAPI exception handlers in `main.py` |
+| 1.4 | Narrow exception catches | Replace 36 `except Exception` with specific types (`paramiko.SSHException`, `json.JSONDecodeError`, `OSError`). Keep broad catches only in top-level task worker |
+| 1.5 | Configurable CORS origins | Add `cors_origins` to `config.py` settings, use in `main.py` |
+
+### Phase 2 — Component Decomposition (medium risk, requires testing)
+
+| # | Item | Current Size | Target |
+|---|------|-------------|--------|
+| 2.1 | Decompose `RTDView.vue` | 1295 lines | 8-10 step/panel components under `components/rtd/` |
+| 2.2 | Decompose `AdminView.vue` | 975 lines | 4 tab panels + shared form component under `components/admin/` |
+| 2.3 | Decompose `EzDFSView.vue` | 756 lines | 3-4 step components under `components/ezdfs/` |
+| 2.4 | Split `task_service.py` | 707 lines | `task_service.py` (CRUD) + `task_worker.py` (background) + `task_queue.py` (queue primitives) |
+| 2.5 | Split `file_service.py` | 572 lines | `file_service.py` (generation) + `file_download.py` (download/aggregate) |
+| 2.6 | Extract store composables | rtd 511 / ezdfs 527 lines | `composables/useTaskPolling.js`, `composables/useSessionSync.js` |
+| 2.7 | Modularize `style.css` | 3017 lines | Split into `tokens.css`, `layout.css`, `forms.css`, `components.css`, page-specific files |
+
+### Phase 3 — Architecture Improvements (higher risk, larger scope)
+
+| # | Item | Description |
+|---|------|-------------|
+| 3.1 | pytest test suite | Add `backend/tests/` with conftest, test auth/admin/catalog/task/file modules |
+| 3.2 | Structured logging | Replace ad-hoc file writes with Python `logging` module; add request ID middleware |
+| 3.3 | Alembic migrations | Replace `_ensure_legacy_columns()` with proper Alembic migration history |
+| 3.4 | TypeScript migration | Incremental: composables -> stores -> views; add type definitions for API responses |
+| 3.5 | Test system protocol | Abstract RTD/ezDFS into a common `TestSystemCatalog`/`TestSystemExecution`/`TestSystemReport` protocol to reduce branching in orchestrator services |
+| 3.6 | SSH credential encryption | Encrypt `HostConfig.login_password` at rest using Fernet symmetric encryption |

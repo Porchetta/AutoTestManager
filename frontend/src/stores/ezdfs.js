@@ -18,6 +18,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
   const majorChangeItems = ref({});
   const currentTask = ref(null);
   const tasks = ref([]);
+  const flowTaskIds = ref([]);
   const modules = ref([]);
   const rules = ref([]);
   const subRuleError = ref("");
@@ -80,6 +81,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
       major_change_items: majorChangeItems.value,
       active_task_id: currentTask.value?.task_id || null,
       latest_status: currentTask.value?.status || null,
+      flow_task_ids: flowTaskIds.value,
       svn_upload: svnUpload.value,
     });
   }
@@ -109,6 +111,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     subRuleMap.value = subRulesSearched.value ? (session.sub_rule_map || {}) : {};
     selectedSubRules.value = subRulesSearched.value ? (session.selected_sub_rules || []) : [];
     majorChangeItems.value = session.major_change_items || {};
+    flowTaskIds.value = Array.isArray(session.flow_task_ids) ? session.flow_task_ids : [];
     svnUpload.value = session.svn_upload || {};
     currentTask.value = session.active_task_id ? { task_id: session.active_task_id } : null;
 
@@ -284,6 +287,12 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     await saveSession();
   }
 
+  function addFlowTaskId(taskId) {
+    if (taskId && !flowTaskIds.value.includes(taskId)) {
+      flowTaskIds.value = [...flowTaskIds.value, taskId];
+    }
+  }
+
   async function run(action = "test") {
     const data = await apiPost(`/api/ezdfs/actions/${action}`, {
       module_name: selectedModule.value,
@@ -302,6 +311,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
       },
     });
     currentTask.value = data.task;
+    addFlowTaskId(data.task?.task_id);
     await refreshTasks();
     await saveSession();
     return data.task;
@@ -337,6 +347,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
       },
     });
     currentTask.value = data.task;
+    addFlowTaskId(data.task?.task_id);
     await refreshTasks();
     await saveSession();
     return data.task;

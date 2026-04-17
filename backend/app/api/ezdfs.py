@@ -61,7 +61,7 @@ def sub_rules(
     try:
         items = get_ezdfs_sub_rules(db, current_user, module_name, rule_name, file_name=file_name)
         return success_response({"items": items, "error": ""})
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, OSError, RuntimeError) as exc:
         return success_response({"items": ["error"], "error": str(exc)})
 
 
