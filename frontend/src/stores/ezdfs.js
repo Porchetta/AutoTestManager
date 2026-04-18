@@ -2,6 +2,7 @@ import { ref } from "vue";
 import { defineStore } from "pinia";
 
 import { apiDelete, apiGet, apiPost, apiPut, downloadFile } from "../api";
+import { waitForTaskTerminalStatus } from "../composables/useTaskPolling";
 
 export const useEzdfsStore = defineStore("ezdfs", () => {
   const currentStep = ref(1);
@@ -363,25 +364,16 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
   }
 
   async function waitForTasks(taskIds, intervalMs = 1200, timeoutMs = 10 * 60 * 1000) {
-    const startedAt = Date.now();
-    const targetIds = new Set(taskIds.filter(Boolean));
-    if (!targetIds.size) {
-      return [];
-    }
-
-    while (Date.now() - startedAt < timeoutMs) {
-      await refreshTasks();
-      const resolved = tasks.value.filter((task) => targetIds.has(task.task_id));
-      if (
-        resolved.length === targetIds.size &&
-        resolved.every((task) => ["DONE", "FAIL", "CANCELED"].includes(task.status))
-      ) {
-        return resolved;
-      }
-      await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
-    }
-
-    throw new Error("작업 완료를 기다리는 중 시간이 초과되었습니다.");
+    return waitForTaskTerminalStatus(
+      refreshTasks,
+      (ids) => tasks.value.filter((task) => ids.includes(task.task_id)),
+      taskIds,
+      {
+        intervalMs,
+        timeoutMs,
+        timeoutMessage: "작업 완료를 기다리는 중 시간이 초과되었습니다.",
+      },
+    );
   }
 
   async function generateReportsForTasks(taskIds) {

@@ -222,7 +222,7 @@ def _create_rtd_tasks(
             requested_payload=requested_payload,
             current_step=step,
         )
-        queue_task(background_tasks, task.task_id, step)
+        queue_task(background_tasks, task.task_id, step, TestType.RTD)
         items.append(serialize_task(task))
 
     return success_response({"items": items})

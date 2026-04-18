@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, onBeforeUnmount, ref, computed } from "vue";
+import { onMounted, ref, computed } from "vue";
 import { apiGet, apiPost } from "../api";
 import { useAuthStore } from "../stores/auth";
+import { useTaskPolling } from "../composables/useTaskPolling";
 
 const authStore = useAuthStore();
 const todayRtd = ref(0);
@@ -10,8 +11,6 @@ const globalStats = ref(null);
 const currentQueue = ref([]);
 const heroLiked = ref(false);
 const dashboardLikeCount = ref(0);
-const DASHBOARD_QUEUE_REFRESH_MS = 3000;
-let queueRefreshTimer = null;
 
 const globalCharts = computed(() => {
   if (!globalStats.value) return [];
@@ -56,6 +55,14 @@ async function loadCurrentQueue() {
     (await apiGet("/api/mypage/dashboard/queue")).items || [];
 }
 
+useTaskPolling(async () => {
+  try {
+    await loadCurrentQueue();
+  } catch {
+    // Keep the last visible queue state when a background refresh fails.
+  }
+});
+
 onMounted(async () => {
   try {
     const today = await apiGet("/api/mypage/stats/today");
@@ -83,21 +90,6 @@ onMounted(async () => {
     await loadDashboardLike();
   } catch {
     heroLiked.value = false;
-  }
-
-  queueRefreshTimer = window.setInterval(async () => {
-    try {
-      await loadCurrentQueue();
-    } catch {
-      // Keep the last visible queue state when a background refresh fails.
-    }
-  }, DASHBOARD_QUEUE_REFRESH_MS);
-});
-
-onBeforeUnmount(() => {
-  if (queueRefreshTimer) {
-    window.clearInterval(queueRefreshTimer);
-    queueRefreshTimer = null;
   }
 });
 </script>

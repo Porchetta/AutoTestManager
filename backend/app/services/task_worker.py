@@ -40,16 +40,21 @@ from app.services.task_queue import (
 from app.utils.enums import ActionType, TaskStatus, TaskStep, TestType
 
 
-def queue_task(background_tasks: BackgroundTasks, task_id: str, step: TaskStep) -> None:
-    background_tasks.add_task(_start_task_thread, task_id, step.value)
+def queue_task(
+    background_tasks: BackgroundTasks,
+    task_id: str,
+    step: TaskStep,
+    test_type: TestType,
+) -> None:
+    background_tasks.add_task(_start_task_thread, task_id, step.value, test_type.value)
 
 
-def _start_task_thread(task_id: str, step: str) -> None:
+def _start_task_thread(task_id: str, step: str, test_type: str) -> None:
     worker = threading.Thread(
         target=run_task,
         args=(task_id, step),
         daemon=True,
-        name=f"task-{task_id[:8]}",
+        name=f"{test_type.lower()}-task-{task_id[:8]}",
     )
     worker.start()
 

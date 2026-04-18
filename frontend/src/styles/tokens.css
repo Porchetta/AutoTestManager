@@ -1,0 +1,118 @@
+/* =========================================================================
+ * AutoTest Manager — Design System
+ * Light-first, dark via [data-theme="dark"] on <html>
+ * ========================================================================= */
+
+/* ---------- Design Tokens: Light (default) ---------- */
+:root {
+  /* Surface */
+  --bg: #f5f7fa;
+  --bg-soft: #eef1f6;
+  --panel: #ffffff;
+  --panel-strong: #ffffff;
+  --panel-sunken: #f8fafc;
+  --sidebar-bg: #ffffff;
+  --sidebar-border: #e5e8ee;
+
+  /* Border */
+  --border: #e4e7ec;
+  --border-strong: #d0d5dd;
+  --border-focus: #0d9488;
+
+  /* Text */
+  --text: #0f172a;
+  --text-soft: #334155;
+  --muted: #64748b;
+  --muted-strong: #475569;
+  --on-accent: #ffffff;
+
+  /* Brand / Accent */
+  --accent: #0d9488;
+  --accent-strong: #0f766e;
+  --accent-weak: #ccfbf1;
+  --accent-tint: #f0fdfa;
+
+  /* Semantic */
+  --secondary: #2563eb;
+  --secondary-weak: #dbeafe;
+  --success: #16a34a;
+  --success-weak: #dcfce7;
+  --warning: #d97706;
+  --warning-weak: #fef3c7;
+  --danger: #dc2626;
+  --danger-weak: #fee2e2;
+  --info: #0284c7;
+  --info-weak: #e0f2fe;
+
+  /* Elevation */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 24px rgba(15, 23, 42, 0.1), 0 4px 8px rgba(15, 23, 42, 0.04);
+  --ring-focus: 0 0 0 3px rgba(13, 148, 136, 0.18);
+
+  /* Radii */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-pill: 999px;
+
+  /* Typography */
+  font-family: 'Inter', 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text);
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+}
+
+/* ---------- Design Tokens: Dark override ---------- */
+[data-theme='dark'] {
+  --bg: #0b0d12;
+  --bg-soft: #11141b;
+  --panel: #141821;
+  --panel-strong: #1a1f2a;
+  --panel-sunken: #0f131a;
+  --sidebar-bg: #0e1118;
+  --sidebar-border: #1f242f;
+
+  --border: #242935;
+  --border-strong: #323847;
+  --border-focus: #2dd4bf;
+
+  --text: #f1f5f9;
+  --text-soft: #cbd5e1;
+  --muted: #94a3b8;
+  --muted-strong: #b6c2d1;
+  --on-accent: #03201c;
+
+  --accent: #2dd4bf;
+  --accent-strong: #5eead4;
+  --accent-weak: rgba(20, 184, 166, 0.14);
+  --accent-tint: rgba(20, 184, 166, 0.08);
+
+  --secondary: #60a5fa;
+  --secondary-weak: rgba(59, 130, 246, 0.14);
+  --success: #4ade80;
+  --success-weak: rgba(34, 197, 94, 0.14);
+  --warning: #fbbf24;
+  --warning-weak: rgba(245, 158, 11, 0.14);
+  --danger: #f87171;
+  --danger-weak: rgba(248, 113, 113, 0.14);
+  --info: #38bdf8;
+  --info-weak: rgba(14, 165, 233, 0.14);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.55), 0 4px 10px rgba(0, 0, 0, 0.4);
+  --ring-focus: 0 0 0 3px rgba(45, 212, 191, 0.22);
+
+  color-scheme: dark;
+}
+

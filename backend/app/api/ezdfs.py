@@ -126,7 +126,7 @@ def _create_ezdfs_task(
         requested_payload=payload.model_dump(),
         current_step=TaskStep.TESTING,
     )
-    queue_task(background_tasks, task.task_id, TaskStep.TESTING)
+    queue_task(background_tasks, task.task_id, TaskStep.TESTING, TestType.EZDFS)
     return success_response({"task": serialize_task(task)})
 
 

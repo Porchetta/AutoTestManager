@@ -1,0 +1,79 @@
+/* ---------- Admin Tabs ---------- */
+.admin-tabs-shell {
+  display: grid;
+  gap: 0;
+}
+
+.admin-tab-strip {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  padding: 0 4px;
+  margin-bottom: -1px;
+  flex-wrap: wrap;
+}
+
+.admin-tab-button {
+  position: relative;
+  padding: 11px 20px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--bg-soft);
+  color: var(--muted-strong);
+  font-weight: 600;
+  font-size: 0.88rem;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.admin-tab-button:hover {
+  color: var(--text);
+  background: var(--panel);
+}
+
+.admin-tab-button[data-active='true'] {
+  background: var(--panel);
+  color: var(--accent-strong);
+  z-index: 2;
+}
+
+.admin-tab-button[data-active='true']::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.admin-tab-panel {
+  border-radius: 0 var(--radius-xl) var(--radius-xl) var(--radius-xl);
+  padding: 22px;
+}
+
+.admin-console-panel {
+  padding: 22px;
+}
+
+.admin-console-grid {
+  gap: 20px;
+  min-width: 0;
+}
+
+.admin-console-grid > * {
+  min-width: 0;
+}
+
+.admin-form-panel {
+  position: sticky;
+  top: 20px;
+  padding: 20px;
+  gap: 12px;
+}
+
+.admin-form-panel h3 {
+  font-size: 1.05rem;
+}
+
