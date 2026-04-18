@@ -41,7 +41,7 @@ from app.services.task_service import (
     list_tasks_by_type,
     serialize_task,
 )
-from app.services.task_worker import queue_mock_task
+from app.services.task_worker import queue_task
 from app.utils.enums import ActionType, TaskStep, TestType
 from app.utils.naming import normalize_target_line_name, sanitize_path_token
 
@@ -222,7 +222,7 @@ def _create_rtd_tasks(
             requested_payload=requested_payload,
             current_step=step,
         )
-        queue_mock_task(background_tasks, task.task_id, step)
+        queue_task(background_tasks, task.task_id, step)
         items.append(serialize_task(task))
 
     return success_response({"items": items})

@@ -40,21 +40,21 @@ from app.services.task_queue import (
 from app.utils.enums import ActionType, TaskStatus, TaskStep, TestType
 
 
-def queue_mock_task(background_tasks: BackgroundTasks, task_id: str, step: TaskStep) -> None:
-    background_tasks.add_task(_start_mock_task_thread, task_id, step.value)
+def queue_task(background_tasks: BackgroundTasks, task_id: str, step: TaskStep) -> None:
+    background_tasks.add_task(_start_task_thread, task_id, step.value)
 
 
-def _start_mock_task_thread(task_id: str, step: str) -> None:
+def _start_task_thread(task_id: str, step: str) -> None:
     worker = threading.Thread(
-        target=run_mock_task,
+        target=run_task,
         args=(task_id, step),
         daemon=True,
-        name=f"rtd-task-{task_id[:8]}",
+        name=f"task-{task_id[:8]}",
     )
     worker.start()
 
 
-def run_mock_task(task_id: str, step: str) -> None:
+def run_task(task_id: str, step: str) -> None:
     db = SessionLocal()
     ezdfs_module_name = ""
     ezdfs_queue_acquired = False

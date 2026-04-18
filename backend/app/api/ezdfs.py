@@ -27,7 +27,7 @@ from app.services.task_service import (
     list_tasks_by_type,
     serialize_task,
 )
-from app.services.task_worker import queue_mock_task
+from app.services.task_worker import queue_task
 from app.utils.enums import ActionType, TaskStep, TestType
 
 router = APIRouter(prefix="/api/ezdfs", tags=["ezdfs"])
@@ -126,7 +126,7 @@ def _create_ezdfs_task(
         requested_payload=payload.model_dump(),
         current_step=TaskStep.TESTING,
     )
-    queue_mock_task(background_tasks, task.task_id, TaskStep.TESTING)
+    queue_task(background_tasks, task.task_id, TaskStep.TESTING)
     return success_response({"task": serialize_task(task)})
 
 
