@@ -13,21 +13,21 @@ from app.services.catalog_service import (
     get_ezdfs_rules,
     get_ezdfs_sub_rules,
 )
-from app.services.file_service import (
+from app.services.file_download import (
     generate_aggregate_ezdfs_summary_file,
-    generate_summary_file,
     get_ezdfs_raw_content_path,
     get_existing_download_path,
 )
+from app.services.file_service import generate_summary_file
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
 from app.services.svn_upload_custom import perform_ezdfs_svn_upload
 from app.services.task_service import (
     create_test_task,
     ensure_task_owner,
     list_tasks_by_type,
-    queue_mock_task,
     serialize_task,
 )
+from app.services.task_worker import queue_mock_task
 from app.utils.enums import ActionType, TaskStep, TestType
 
 router = APIRouter(prefix="/api/ezdfs", tags=["ezdfs"])

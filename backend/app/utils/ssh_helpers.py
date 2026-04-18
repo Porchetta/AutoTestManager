@@ -16,6 +16,7 @@ def build_clean_bash_command(command: str) -> str:
 
 def run_remote_command(
     host: HostConfig,
+    login_user: str,
     working_dir: str,
     command: str,
     timeout: int = 120,
@@ -27,7 +28,7 @@ def run_remote_command(
     from app.core.exceptions import RemoteCommandError, SSHConnectionError
 
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore").strip()

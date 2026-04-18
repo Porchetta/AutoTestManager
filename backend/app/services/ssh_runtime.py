@@ -9,7 +9,8 @@ from typing import Iterator
 
 from app.core.config import get_settings
 from app.core.exceptions import SSHConnectionError
-from app.models.entities import HostConfig
+from app.db.session import SessionLocal
+from app.models.entities import HostConfig, HostCredential
 from app.utils.ssh_helpers import build_clean_bash_command
 
 SSH_CONNECT_TIMEOUT = 5
@@ -26,11 +27,11 @@ _cache_lock = threading.Lock()
 
 
 @contextmanager
-def open_limited_ssh_client(host: HostConfig) -> Iterator[object]:
-    semaphore = _get_host_semaphore(host)
+def open_limited_ssh_client(host: HostConfig, login_user: str) -> Iterator[object]:
+    semaphore = _get_host_semaphore(host, login_user)
     semaphore.acquire()
     try:
-        client = _open_raw_ssh_client(host)
+        client = _open_raw_ssh_client(host, login_user)
         try:
             yield client
         finally:
@@ -39,16 +40,16 @@ def open_limited_ssh_client(host: HostConfig) -> Iterator[object]:
         semaphore.release()
 
 
-def get_host_parallel_limit(host: HostConfig) -> int:
+def get_host_parallel_limit(host: HostConfig, login_user: str) -> int:
     with _cache_lock:
         if host.name in _host_limit_cache:
             return _host_limit_cache[host.name]
 
-    return probe_host_parallel_limit(host)
+    return probe_host_parallel_limit(host, login_user)
 
 
-def probe_host_parallel_limit(host: HostConfig) -> int:
-    info = probe_host_parallel_limit_info(host)
+def probe_host_parallel_limit(host: HostConfig, login_user: str) -> int:
+    info = probe_host_parallel_limit_info(host, login_user)
     return int(info["parallel_limit"])
 
 
@@ -63,16 +64,16 @@ def get_host_parallel_limit_info(host: HostConfig) -> dict[str, object]:
     }
 
 
-def probe_host_parallel_limit_info(host: HostConfig) -> dict[str, object]:
+def probe_host_parallel_limit_info(host: HostConfig, login_user: str) -> dict[str, object]:
     try:
-        limit = _probe_remote_parallel_limit(host)
+        limit = _probe_remote_parallel_limit(host, login_user)
         source = "remote"
     except Exception as exc:  # noqa: BLE001
         limit = DEFAULT_SSH_PARALLEL_LIMIT
         source = "default"
         _append_admin_alert(
             f"[SSH_LIMIT_FALLBACK] host={host.name} ip={host.ip} "
-            f"reason={exc} fallback={DEFAULT_SSH_PARALLEL_LIMIT}"
+            f"user={login_user} reason={exc} fallback={DEFAULT_SSH_PARALLEL_LIMIT}"
         )
 
     _update_host_limit_cache(host.name, limit, source)
@@ -83,8 +84,8 @@ def probe_host_parallel_limit_info(host: HostConfig) -> dict[str, object]:
     }
 
 
-def _get_host_semaphore(host: HostConfig) -> threading.BoundedSemaphore:
-    limit = get_host_parallel_limit(host)
+def _get_host_semaphore(host: HostConfig, login_user: str) -> threading.BoundedSemaphore:
+    limit = get_host_parallel_limit(host, login_user)
     with _cache_lock:
         semaphore = _host_semaphore_cache.get(host.name)
         if semaphore is None:
@@ -93,7 +94,7 @@ def _get_host_semaphore(host: HostConfig) -> threading.BoundedSemaphore:
         return semaphore
 
 
-def _probe_remote_parallel_limit(host: HostConfig) -> int:
+def _probe_remote_parallel_limit(host: HostConfig, login_user: str) -> int:
     command = build_clean_bash_command(
         "if [ -x /usr/sbin/sshd ]; then "
         "/usr/sbin/sshd -T 2>/dev/null | awk '/^maxstartups /{print $2; exit}'; "
@@ -102,7 +103,7 @@ def _probe_remote_parallel_limit(host: HostConfig) -> int:
         "fi"
     )
 
-    with open_limited_ssh_client_raw(host) as client:
+    with open_limited_ssh_client_raw(host, login_user) as client:
         _, stdout, stderr = client.exec_command(command, timeout=10)
         exit_status = stdout.channel.recv_exit_status()
         output = stdout.read().decode("utf-8", errors="ignore").strip()
@@ -124,15 +125,51 @@ def _probe_remote_parallel_limit(host: HostConfig) -> int:
 
 
 @contextmanager
-def open_limited_ssh_client_raw(host: HostConfig) -> Iterator[object]:
-    client = _open_raw_ssh_client(host)
+def open_limited_ssh_client_raw(host: HostConfig, login_user: str) -> Iterator[object]:
+    client = _open_raw_ssh_client(host, login_user)
     try:
         yield client
     finally:
         client.close()
 
 
-def _open_raw_ssh_client(host: HostConfig):
+@contextmanager
+def open_direct_ssh_client(
+    host_name: str,
+    ip: str,
+    login_user: str,
+    login_password: str,
+) -> Iterator[object]:
+    """Open an SSH client using inline credentials (e.g. SVN upload env host).
+
+    This bypasses the HostCredential table lookup and is intended for hosts
+    whose credentials live outside the Host admin page (e.g. env vars).
+    Uses the same per-host semaphore cache, keyed by ``host_name``.
+    """
+
+    with _cache_lock:
+        semaphore = _host_semaphore_cache.get(host_name)
+        if semaphore is None:
+            semaphore = threading.BoundedSemaphore(DEFAULT_SSH_PARALLEL_LIMIT)
+            _host_semaphore_cache[host_name] = semaphore
+
+    semaphore.acquire()
+    try:
+        client = _open_raw_ssh_client_direct(host_name, ip, login_user, login_password)
+        try:
+            yield client
+        finally:
+            client.close()
+    finally:
+        semaphore.release()
+
+
+def _open_raw_ssh_client_direct(
+    host_name: str,
+    ip: str,
+    login_user: str,
+    login_password: str,
+):
     try:
         import paramiko
     except ModuleNotFoundError as exc:
@@ -142,16 +179,68 @@ def _open_raw_ssh_client(host: HostConfig):
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
         client.connect(
-            hostname=host.ip,
-            username=host.login_user,
-            password=host.login_password,
+            hostname=ip,
+            username=login_user,
+            password=login_password,
             timeout=SSH_CONNECT_TIMEOUT,
             auth_timeout=SSH_AUTH_TIMEOUT,
             banner_timeout=SSH_BANNER_TIMEOUT,
         )
     except (paramiko.SSHException, OSError) as exc:
         client.close()
-        raise SSHConnectionError(f"SSH connection failed for host={host.name}: {exc}") from exc
+        raise SSHConnectionError(
+            f"SSH connection failed for host={host_name} user={login_user}: {exc}"
+        ) from exc
+    return client
+
+
+def _resolve_credential(host: HostConfig, login_user: str) -> HostCredential:
+    if not login_user:
+        raise SSHConnectionError(
+            f"SSH connection failed for host={host.name}: login_user is empty"
+        )
+
+    with SessionLocal() as session:
+        credential = (
+            session.query(HostCredential)
+            .filter(
+                HostCredential.host_id == host.id,
+                HostCredential.login_user == login_user,
+            )
+            .first()
+        )
+        if credential is None:
+            raise SSHConnectionError(
+                f"SSH credential not found for host={host.name} user={login_user}"
+            )
+        session.expunge(credential)
+    return credential
+
+
+def _open_raw_ssh_client(host: HostConfig, login_user: str):
+    try:
+        import paramiko
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("paramiko is not installed") from exc
+
+    credential = _resolve_credential(host, login_user)
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(
+            hostname=host.ip,
+            username=credential.login_user,
+            password=credential.login_password,
+            timeout=SSH_CONNECT_TIMEOUT,
+            auth_timeout=SSH_AUTH_TIMEOUT,
+            banner_timeout=SSH_BANNER_TIMEOUT,
+        )
+    except (paramiko.SSHException, OSError) as exc:
+        client.close()
+        raise SSHConnectionError(
+            f"SSH connection failed for host={host.name} user={login_user}: {exc}"
+        ) from exc
     return client
 
 

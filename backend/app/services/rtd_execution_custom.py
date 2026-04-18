@@ -76,6 +76,7 @@ def execute_copy_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
     if rule_file_names:
         copied_rule_count = _copy_files_between_hosts(
             source_host=source_host,
+            source_login_user=source_config.login_user,
             source_dir=source_config.home_dir_path,
             target_host=target_host,
             target_dir=target_config.home_dir_path,
@@ -85,6 +86,7 @@ def execute_copy_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
     if macro_file_names:
         copied_macro_count = _copy_files_between_hosts(
             source_host=source_host,
+            source_login_user=source_config.login_user,
             source_dir=_macro_dir_from_home(source_config.home_dir_path),
             target_host=target_host,
             target_dir=_macro_dir_from_home(target_config.home_dir_path),
@@ -140,10 +142,10 @@ def execute_compile_action(db: Session, task: TestTask, payload: dict[str, Any])
     # so compile starts from the lowest-priority end of that ordered list.
     for macro_name in reversed(macro_names):
         command = f"./atm_compiler {shlex.quote(macro_name)} {shlex.quote(config.line_name)}"
-        outputs.append(run_remote_command(host, config.home_dir_path, command))
+        outputs.append(run_remote_command(host, config.login_user, config.home_dir_path, command))
     for rule_name in rule_names:
         command = f"./atm_compiler {shlex.quote(rule_name)} {shlex.quote(config.line_name)}"
-        outputs.append(run_remote_command(host, config.home_dir_path, command))
+        outputs.append(run_remote_command(host, config.login_user, config.home_dir_path, command))
 
     return {
         "message": (
@@ -193,7 +195,7 @@ def execute_test_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
     output_by_rule: list[tuple[str, str]] = []
     for rule_name in rule_names:
         command = f"./atm_testscript {shlex.quote(rule_name)} {shlex.quote(config.line_name)}"
-        output = run_remote_command(host, config.home_dir_path, command)
+        output = run_remote_command(host, config.login_user, config.home_dir_path, command)
         outputs.append(output)
         output_by_rule.append((rule_name, output))
 
@@ -352,6 +354,7 @@ def _find_catalog_file_name(catalog_cache: dict[str, Any], rule_name: str, versi
 
 def _copy_files_between_hosts(
     source_host: HostConfig,
+    source_login_user: str,
     source_dir: str,
     target_host: HostConfig,
     target_dir: str,
@@ -367,24 +370,24 @@ def _copy_files_between_hosts(
         return 0
 
     _assert_cp_supported_between_hosts(source_host, target_host)
-    _assert_remote_directory_exists(source_host, source_dir, "source")
-    _assert_remote_directory_exists(source_host, target_dir, "target")
+    _assert_remote_directory_exists(source_host, source_login_user, source_dir, "source")
+    _assert_remote_directory_exists(source_host, source_login_user, target_dir, "target")
 
     copied_count = 0
     for file_name in file_names:
         source_path = posixpath.join(source_dir, file_name)
         target_path = posixpath.join(target_dir, posixpath.basename(file_name))
-        _copy_remote_file_with_cp(source_host, source_path, target_path)
+        _copy_remote_file_with_cp(source_host, source_login_user, source_path, target_path)
         copied_count += 1
 
     return copied_count
 
 
-def _run_remote_shell_command(host: HostConfig, command: str, timeout: int = 120) -> str:
+def _run_remote_shell_command(host: HostConfig, login_user: str, command: str, timeout: int = 120) -> str:
     """Run one raw shell command without changing directories and return stdout."""
     remote_command = build_clean_bash_command(command)
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore").strip()
@@ -410,12 +413,13 @@ def _assert_cp_supported_between_hosts(source_host: HostConfig, target_host: Hos
         )
 
 
-def _assert_remote_directory_exists(host: HostConfig, directory: str, label: str) -> None:
+def _assert_remote_directory_exists(host: HostConfig, login_user: str, directory: str, label: str) -> None:
     """Validate a remote directory before file copy starts."""
     normalized = posixpath.normpath(directory)
     try:
         _run_remote_shell_command(
             host,
+            login_user,
             f"test -d {shlex.quote(normalized)}",
         )
     except RuntimeError as exc:
@@ -424,13 +428,14 @@ def _assert_remote_directory_exists(host: HostConfig, directory: str, label: str
         ) from exc
 
 
-def _copy_remote_file_with_cp(host: HostConfig, source_path: str, target_path: str) -> None:
+def _copy_remote_file_with_cp(host: HostConfig, login_user: str, source_path: str, target_path: str) -> None:
     """Copy one remote file with `cp -f`, validating the source file first."""
     source_normalized = posixpath.normpath(source_path)
     target_normalized = posixpath.normpath(target_path)
     try:
         _run_remote_shell_command(
             host,
+            login_user,
             f"test -f {shlex.quote(source_normalized)}",
         )
     except RuntimeError as exc:
@@ -441,6 +446,7 @@ def _copy_remote_file_with_cp(host: HostConfig, source_path: str, target_path: s
     try:
         _run_remote_shell_command(
             host,
+            login_user,
             f"cp -f -- {shlex.quote(source_normalized)} {shlex.quote(target_normalized)}",
         )
     except RuntimeError as exc:

@@ -2178,6 +2178,91 @@ select option {
   background: var(--accent-tint);
 }
 
+.data-table tbody tr.credential-subrow {
+  background: var(--bg-soft);
+}
+
+.data-table tbody tr.credential-subrow:hover {
+  background: var(--bg-soft);
+}
+
+.data-table tbody tr.credential-subrow > td {
+  padding: 10px 16px 14px;
+}
+
+.credential-sub-panel {
+  padding: 4px 0 2px;
+}
+
+.credential-sub-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92em;
+  background: var(--bg-subtle, transparent);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.credential-sub-table thead th {
+  text-align: left;
+  padding: 8px 12px;
+  background: var(--bg-muted, transparent);
+  color: var(--text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.credential-sub-table tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+}
+
+.credential-sub-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.credential-add-row td {
+  background: transparent;
+}
+
+.credential-add-trigger {
+  padding: 4px 12px;
+  font-size: 0.92em;
+}
+
+.credential-count-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+.expand-col {
+  width: 36px;
+  text-align: center;
+}
+
+.expand-toggle-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.expand-toggle-button:hover {
+  background: var(--bg-soft);
+  color: var(--accent-strong);
+}
+
 .sortable-header {
   cursor: pointer;
   user-select: none;

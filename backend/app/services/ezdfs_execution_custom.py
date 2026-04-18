@@ -67,7 +67,9 @@ def execute_ezdfs_test_action(db: Session, task: TestTask, payload: dict[str, An
         raise ValueError("rule_name is required for ezDFS test action")
 
     config, host = _get_ezdfs_module_context(db, module_name)
-    output, executed_command = _run_ezdfs_test_binary(host, config.home_dir_path, rule_name)
+    output, executed_command = _run_ezdfs_test_binary(
+        host, config.login_user, config.home_dir_path, rule_name
+    )
 
     return {
         "message": f"Test completed: module={config.module_name}, rule={rule_name}",
@@ -91,6 +93,7 @@ def _get_ezdfs_module_context(db: Session, module_name: str) -> tuple[EzdfsConfi
 
 def _run_ezdfs_test_binary(
     host: HostConfig,
+    login_user: str,
     working_dir: str,
     rule_name: str,
     timeout: int = 1200,
@@ -127,7 +130,7 @@ def _run_ezdfs_test_binary(
     )
 
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore").strip()

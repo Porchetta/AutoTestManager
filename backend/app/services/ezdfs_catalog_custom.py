@@ -25,7 +25,7 @@ from app.services.ssh_runtime import open_limited_ssh_client
 from app.utils.ssh_helpers import build_clean_bash_command
 
 
-def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[str]:
+def fetch_rule_source_file_names(host: HostConfig, login_user: str, home_dir_path: str) -> list[str]:
     """
     Discover ezDFS deployed rule filenames from the remote module directory.
 
@@ -47,7 +47,7 @@ def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[s
     )
 
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             _, stdout, stderr = client.exec_command(command, timeout=10)
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
@@ -61,7 +61,7 @@ def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[s
     return [line.strip() for line in output.splitlines() if line.strip() and not line.startswith(".")]
 
 
-def fetch_backup_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[str]:
+def fetch_backup_rule_source_file_names(host: HostConfig, login_user: str, home_dir_path: str) -> list[str]:
     """
     Discover backup ezDFS rule filenames from the remote backup directory.
 
@@ -83,7 +83,7 @@ def fetch_backup_rule_source_file_names(host: HostConfig, home_dir_path: str) ->
     )
 
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             _, stdout, stderr = client.exec_command(command, timeout=10)
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
@@ -153,7 +153,7 @@ def parse_rule_catalog_entries(file_names: list[str]) -> list[dict[str, str]]:
     )
 
 
-def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) -> str:
+def read_rule_source_text(host: HostConfig, login_user: str, home_dir_path: str, file_name: str) -> str:
     """
     Read one deployed ezDFS rule file over SSH.
 
@@ -171,7 +171,7 @@ def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) 
     )
 
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             _, stdout, stderr = client.exec_command(command, timeout=10)
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
@@ -185,13 +185,13 @@ def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) 
     return output
 
 
-def read_rule_source_bytes(host: HostConfig, home_dir_path: str, file_name: str) -> bytes:
+def read_rule_source_bytes(host: HostConfig, login_user: str, home_dir_path: str, file_name: str) -> bytes:
     """Read one deployed ezDFS rule file as raw bytes over SFTP."""
     deployed_dir = _deployed_dir_from_home(home_dir_path)
     remote_path = f"{deployed_dir.rstrip('/')}/{file_name}"
-    
+
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             sftp = client.open_sftp()
             try:
                 with sftp.open(remote_path, "rb") as remote_file:
@@ -251,6 +251,7 @@ def extract_sub_rule_list_from_rule_text(rule_text: str, rule_name: str) -> list
 
 def resolve_recursive_sub_rule_list(
     host: HostConfig,
+    login_user: str,
     home_dir_path: str,
     root_rule_text: str,
     catalog_files: list[dict[str, str]],
@@ -299,7 +300,7 @@ def resolve_recursive_sub_rule_list(
                 continue
 
             try:
-                child_rule_text = read_rule_source_text(host, home_dir_path, child_file_name)
+                child_rule_text = read_rule_source_text(host, login_user, home_dir_path, child_file_name)
             except (CatalogError, OSError):
                 continue
 

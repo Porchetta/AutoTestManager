@@ -36,7 +36,7 @@ from app.services.session_service import (
     get_runtime_session_payload,
     upsert_runtime_session,
 )
-from app.services.ssh_runtime import open_limited_ssh_client
+from app.services.ssh_runtime import open_direct_ssh_client, open_limited_ssh_client
 from app.utils.enums import TestType
 
 settings = get_settings()
@@ -124,6 +124,7 @@ def perform_rtd_svn_upload(
 
         file_contents[file_name] = read_rtd_rule_source_bytes(
             host,
+            config.login_user,
             config.home_dir_path,
             file_name,
         )
@@ -136,6 +137,7 @@ def perform_rtd_svn_upload(
             continue
         file_contents[macro_file_name] = _read_rtd_macro_source_bytes(
             host,
+            config.login_user,
             config.home_dir_path,
             macro_file_name,
         )
@@ -214,6 +216,7 @@ def perform_ezdfs_svn_upload(
         cleaned_file_name = re.sub(r"-ver\..+\.rul$", ".rul", file_name, flags=re.IGNORECASE)
         file_contents[cleaned_file_name] = read_ezdfs_rule_source_bytes(
             host,
+            config.login_user,
             config.home_dir_path,
             file_name,
         )
@@ -231,6 +234,7 @@ def perform_ezdfs_svn_upload(
         cleaned_file_name = re.sub(r"-ver\..+\.rul$", ".rul", sub_rule_file_name, flags=re.IGNORECASE)
         file_contents[cleaned_file_name] = read_ezdfs_rule_source_bytes(
             host,
+            config.login_user,
             config.home_dir_path,
             sub_rule_file_name,
         )
@@ -339,7 +343,7 @@ def _upload_remote_files(
 ) -> None:
     """Copy each prepared rule file to the remote work directory over SFTP."""
 
-    with open_limited_ssh_client(host) as client:
+    with open_direct_ssh_client(host.name, host.ip, host.login_user, host.login_password) as client:
         sftp = client.open_sftp()
         try:
             for file_name in uploaded_file_names:
@@ -366,7 +370,7 @@ def _run_remote_svn_checkin(
         "bash --noprofile --norc -lc "
         + shlex.quote(f"cd {quoted_dir} && {shlex.quote(command_path)}")
     )
-    with open_limited_ssh_client(host) as client:
+    with open_direct_ssh_client(host.name, host.ip, host.login_user, host.login_password) as client:
         stdin, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
         stdin.write(command_input)
         stdin.flush()
@@ -391,7 +395,7 @@ def _run_remote_shell_command(
     """Run a simple non-interactive shell command on the remote SVN host."""
 
     remote_command = build_clean_bash_command(command)
-    with open_limited_ssh_client(host) as client:
+    with open_direct_ssh_client(host.name, host.ip, host.login_user, host.login_password) as client:
         _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
         exit_status = stdout.channel.recv_exit_status()
         output = "\n".join(
@@ -463,13 +467,15 @@ def _collect_selected_sub_rule_names(selected_sub_rules: list[object]) -> list[s
     return result
 
 
-def _read_rtd_macro_source_bytes(host: HostConfig, home_dir_path: str, file_name: str) -> bytes:
+def _read_rtd_macro_source_bytes(
+    host: HostConfig, login_user: str, home_dir_path: str, file_name: str
+) -> bytes:
     """Read one RTD macro/report file from the sibling Macro directory via SFTP."""
     macro_dir = _macro_dir_from_home(home_dir_path)
     remote_path = f"{macro_dir.rstrip('/')}/{file_name}"
 
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             sftp = client.open_sftp()
             try:
                 with sftp.open(remote_path, "rb") as remote_file:

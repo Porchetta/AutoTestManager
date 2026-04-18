@@ -21,7 +21,7 @@ from app.services.rtd_catalog_custom import (
     read_rule_source_text,
 )
 from app.services.session_service import get_runtime_session_payload, upsert_runtime_session
-from app.utils.constants import RULE_ERROR_ITEM, TARGET_SUFFIX
+from app.utils.constants import RULE_ERROR_ITEM
 from app.utils.enums import TestType
 
 
@@ -143,7 +143,7 @@ def get_macro_list_by_rule_name(
     if not file_name:
         raise ValueError("Rule file not found in session cache")
 
-    content = read_rule_source_text(host, config.home_dir_path, file_name)
+    content = read_rule_source_text(host, config.login_user, config.home_dir_path, file_name)
     return extract_macro_list(host, config.home_dir_path, content, rule_name)
 
 
@@ -173,8 +173,7 @@ def _merge_macros_in_order(primary_macros: list[str], secondary_macros: list[str
 
 
 def get_target_lines_by_business_unit(db: Session, business_unit: str, current_user: User) -> list[str]:
-    lines = get_lines_by_business_unit(db, business_unit, current_user)
-    return [f"{line}{TARGET_SUFFIX}" for line in lines]
+    return get_lines_by_business_unit(db, business_unit, current_user)
 
 
 def get_ezdfs_modules(db: Session, current_user: User) -> list[str]:
@@ -212,13 +211,14 @@ def get_ezdfs_sub_rules(
     if not resolved_file_name:
         raise ValueError("ezDFS rule file not found in session cache")
 
-    content = read_ezdfs_rule_source_text(host, config.home_dir_path, resolved_file_name)
+    content = read_ezdfs_rule_source_text(host, config.login_user, config.home_dir_path, resolved_file_name)
     selected_entry = next(
         (item for item in catalog.get("files", []) if item.get("file_name") == resolved_file_name),
         None,
     )
     return resolve_recursive_sub_rule_list(
         host,
+        config.login_user,
         config.home_dir_path,
         content,
         catalog.get("files", []),
@@ -309,7 +309,7 @@ def _fetch_rtd_catalog_over_ssh(db: Session, line_name: str) -> dict:
     if host is None:
         raise ValueError("RTD host config not found")
 
-    remote_files = fetch_rule_source_file_names(host, config.home_dir_path)
+    remote_files = fetch_rule_source_file_names(host, config.login_user, config.home_dir_path)
     catalog_files = parse_rule_catalog_entries(remote_files)
     versions_by_rule = _group_versions_by_rule(catalog_files)
     rules = sorted(versions_by_rule.keys(), key=str.lower)
@@ -332,10 +332,10 @@ def _fetch_ezdfs_catalog_over_ssh(db: Session, module_name: str) -> dict:
     if host is None:
         raise ValueError("ezDFS host config not found")
 
-    remote_files = fetch_ezdfs_rule_source_file_names(host, config.home_dir_path)
+    remote_files = fetch_ezdfs_rule_source_file_names(host, config.login_user, config.home_dir_path)
     catalog_files = parse_ezdfs_rule_catalog_entries(remote_files)
     try:
-        backup_remote_files = fetch_ezdfs_backup_rule_source_file_names(host, config.home_dir_path)
+        backup_remote_files = fetch_ezdfs_backup_rule_source_file_names(host, config.login_user, config.home_dir_path)
         backup_catalog_files = parse_ezdfs_rule_catalog_entries(backup_remote_files)
     except (OSError, RuntimeError):
         backup_catalog_files = []

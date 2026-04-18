@@ -22,7 +22,7 @@ from app.services.ssh_runtime import open_limited_ssh_client
 from app.utils.ssh_helpers import build_clean_bash_command
 
 
-def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[str]:
+def fetch_rule_source_file_names(host: HostConfig, login_user: str, home_dir_path: str) -> list[str]:
     """
     Discover raw RTD source filenames from the remote Dispatcher directory.
 
@@ -46,7 +46,7 @@ def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[s
     )
 
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             _, stdout, stderr = client.exec_command(command, timeout=10)
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
@@ -104,7 +104,7 @@ def parse_rule_catalog_entries(file_names: list[str]) -> list[dict[str, str]]:
     return sorted(catalog_files, key=lambda item: (item["rule_name"].lower(), item["version"].lower()))
 
 
-def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) -> str:
+def read_rule_source_text(host: HostConfig, login_user: str, home_dir_path: str, file_name: str) -> str:
     """
     Read one RTD source `.report` file from the remote Dispatcher directory.
 
@@ -118,10 +118,10 @@ def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) 
 
     Customize this function if report contents must be loaded differently.
     """
-    return read_remote_source_text(host, home_dir_path, file_name)
+    return read_remote_source_text(host, login_user, home_dir_path, file_name)
 
 
-def read_remote_source_text(host: HostConfig, remote_dir_path: str, file_name: str) -> str:
+def read_remote_source_text(host: HostConfig, login_user: str, remote_dir_path: str, file_name: str) -> str:
     """
     Shared remote text reader for RTD `.report` files.
 
@@ -142,7 +142,7 @@ def read_remote_source_text(host: HostConfig, remote_dir_path: str, file_name: s
     )
 
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             _, stdout, stderr = client.exec_command(command, timeout=10)
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
@@ -156,16 +156,16 @@ def read_remote_source_text(host: HostConfig, remote_dir_path: str, file_name: s
     return output
 
 
-def read_rule_source_bytes(host: HostConfig, home_dir_path: str, file_name: str) -> bytes:
+def read_rule_source_bytes(host: HostConfig, login_user: str, home_dir_path: str, file_name: str) -> bytes:
     """Read one RTD source `.report` file as raw bytes via SFTP."""
-    return read_remote_source_bytes(host, home_dir_path, file_name)
+    return read_remote_source_bytes(host, login_user, home_dir_path, file_name)
 
 
-def read_remote_source_bytes(host: HostConfig, remote_dir_path: str, file_name: str) -> bytes:
+def read_remote_source_bytes(host: HostConfig, login_user: str, remote_dir_path: str, file_name: str) -> bytes:
     """Shared remote byte reader for RTD `.report` files via SFTP."""
     remote_path = f"{remote_dir_path.rstrip('/')}/{file_name}"
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             sftp = client.open_sftp()
             try:
                 with sftp.open(remote_path, "rb") as remote_file:

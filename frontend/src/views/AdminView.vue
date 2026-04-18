@@ -25,22 +25,47 @@ const hostDrafts = reactive({})
 const rtdDrafts = reactive({})
 const ezdfsDrafts = reactive({})
 
-const hostForm = reactive({ name: '', ip: '', login_user: '', login_password: '' })
+const hostForm = reactive({ name: '', ip: '' })
 const rtdForm = reactive({
   line_name: '',
   line_id: '',
   business_unit: '',
   home_dir_path: '',
   host_name: '',
+  login_user: '',
 })
 const ezdfsForm = reactive({
   module_name: '',
   port: 22,
   home_dir_path: '',
   host_name: '',
+  login_user: '',
 })
 
+const expandedHosts = reactive(new Set())
+const credentialDrafts = reactive({})
+const credentialForms = reactive({})
+
 const hostOptions = computed(() => hosts.value.map((item) => item.name))
+const hostCredentialMap = computed(() => {
+  const map = {}
+  for (const host of hosts.value) {
+    map[host.name] = Array.isArray(host.credentials) ? host.credentials : []
+  }
+  return map
+})
+const rtdLoginUserOptions = computed(() =>
+  (hostCredentialMap.value[rtdForm.host_name] || []).map((cred) => cred.login_user),
+)
+const ezdfsLoginUserOptions = computed(() =>
+  (hostCredentialMap.value[ezdfsForm.host_name] || []).map((cred) => cred.login_user),
+)
+function credentialsFor(hostName) {
+  return hostCredentialMap.value[hostName] || []
+}
+function loginUserOptionsFor(hostName) {
+  return credentialsFor(hostName).map((cred) => cred.login_user)
+}
 const userModules = computed(() => {
   const modules = [...new Set(users.value.map((user) => user.module_name).filter(Boolean))]
   return ['ALL', ...modules.sort((a, b) => a.localeCompare(b))]
@@ -97,11 +122,32 @@ function syncHostDrafts() {
       values: {
         name: host.name,
         ip: host.ip,
-        login_user: host.login_user,
-        login_password: host.login_password,
+      },
+    }
+    syncCredentialDrafts(host)
+    if (!credentialForms[host.name]) {
+      credentialForms[host.name] = { login_user: '', login_password: '', visible: false }
+    }
+  }
+}
+
+function syncCredentialDrafts(host) {
+  const map = credentialDrafts[host.name] || {}
+  const nextKeys = new Set()
+  for (const cred of host.credentials || []) {
+    nextKeys.add(cred.login_user)
+    map[cred.login_user] = {
+      editing: map[cred.login_user]?.editing ?? false,
+      values: {
+        login_user: cred.login_user,
+        login_password: '',
       },
     }
   }
+  for (const key of Object.keys(map)) {
+    if (!nextKeys.has(key)) delete map[key]
+  }
+  credentialDrafts[host.name] = map
 }
 
 function hostSshLimitInfo(hostName) {
@@ -125,6 +171,7 @@ function syncRtdDrafts() {
         business_unit: item.business_unit,
         home_dir_path: item.home_dir_path,
         host_name: item.host_name,
+        login_user: item.login_user,
       },
     }
   }
@@ -139,6 +186,7 @@ function syncEzdfsDrafts() {
         port: item.port,
         home_dir_path: item.home_dir_path,
         host_name: item.host_name,
+        login_user: item.login_user,
       },
     }
   }
@@ -190,12 +238,7 @@ function isEzdfsEditing(item) {
 function hostChanged(host) {
   const draft = hostDraft(host)
   if (!draft) return false
-  return (
-    draft.values.name !== host.name ||
-    draft.values.ip !== host.ip ||
-    draft.values.login_user !== host.login_user ||
-    draft.values.login_password !== host.login_password
-  )
+  return draft.values.name !== host.name || draft.values.ip !== host.ip
 }
 
 function rtdChanged(item) {
@@ -206,7 +249,8 @@ function rtdChanged(item) {
     draft.values.line_id !== item.line_id ||
     draft.values.business_unit !== item.business_unit ||
     draft.values.home_dir_path !== item.home_dir_path ||
-    draft.values.host_name !== item.host_name
+    draft.values.host_name !== item.host_name ||
+    draft.values.login_user !== item.login_user
   )
 }
 
@@ -217,7 +261,8 @@ function ezdfsChanged(item) {
     draft.values.module_name !== item.module_name ||
     Number(draft.values.port) !== Number(item.port) ||
     draft.values.home_dir_path !== item.home_dir_path ||
-    draft.values.host_name !== item.host_name
+    draft.values.host_name !== item.host_name ||
+    draft.values.login_user !== item.login_user
   )
 }
 
@@ -334,7 +379,7 @@ async function applyUser(user) {
 
 async function createHost() {
   await apiPost('/api/admin/hosts', hostForm)
-  Object.assign(hostForm, { name: '', ip: '', login_user: '', login_password: '' })
+  Object.assign(hostForm, { name: '', ip: '' })
   await loadAll()
 }
 
@@ -345,12 +390,7 @@ function toggleHostEdit(host) {
 function cancelHostEdit(host) {
   hostDrafts[host.name] = {
     editing: false,
-    values: {
-      name: host.name,
-      ip: host.ip,
-      login_user: host.login_user,
-      login_password: host.login_password,
-    },
+    values: { name: host.name, ip: host.ip },
   }
 }
 
@@ -368,6 +408,117 @@ async function deleteHost(name) {
   await loadAll()
 }
 
+function isHostExpanded(hostName) {
+  return expandedHosts.has(hostName)
+}
+
+function toggleHostExpand(hostName) {
+  if (expandedHosts.has(hostName)) {
+    expandedHosts.delete(hostName)
+  } else {
+    expandedHosts.add(hostName)
+  }
+}
+
+function credentialForm(hostName) {
+  if (!credentialForms[hostName]) {
+    credentialForms[hostName] = { login_user: '', login_password: '', visible: false }
+  }
+  return credentialForms[hostName]
+}
+
+function showCredentialForm(hostName) {
+  credentialForm(hostName).visible = true
+}
+
+function cancelCredentialForm(hostName) {
+  credentialForms[hostName] = { login_user: '', login_password: '', visible: false }
+}
+
+async function addCredential(hostName) {
+  const form = credentialForm(hostName)
+  if (!form.login_user.trim() || !form.login_password) {
+    uiStore.setNotice('login_user와 password를 입력하세요.')
+    return
+  }
+  await apiPost(`/api/admin/hosts/${hostName}/credentials`, {
+    login_user: form.login_user.trim(),
+    login_password: form.login_password,
+  })
+  cancelCredentialForm(hostName)
+  await loadAll()
+  uiStore.setNotice(`${hostName}에 credential이 추가되었습니다.`)
+}
+
+function credentialDraft(hostName, loginUser) {
+  return credentialDrafts[hostName]?.[loginUser]
+}
+
+function isCredentialEditing(hostName, loginUser) {
+  return Boolean(credentialDraft(hostName, loginUser)?.editing)
+}
+
+function toggleCredentialEdit(hostName, loginUser) {
+  const draft = credentialDraft(hostName, loginUser)
+  if (!draft) return
+  draft.editing = !draft.editing
+  if (!draft.editing) {
+    draft.values = { login_user: loginUser, login_password: '' }
+  }
+}
+
+function cancelCredentialEdit(hostName, loginUser) {
+  const draft = credentialDraft(hostName, loginUser)
+  if (!draft) return
+  draft.editing = false
+  draft.values = { login_user: loginUser, login_password: '' }
+}
+
+async function updateCredential(hostName, loginUser) {
+  const draft = credentialDraft(hostName, loginUser)
+  if (!draft) return
+  const payload = {
+    login_user: draft.values.login_user.trim(),
+  }
+  if (draft.values.login_password) {
+    payload.login_password = draft.values.login_password
+  }
+  await apiPut(`/api/admin/hosts/${hostName}/credentials/${encodeURIComponent(loginUser)}`, payload)
+  await loadAll()
+  uiStore.setNotice(`${hostName}/${loginUser} credential이 수정되었습니다.`)
+}
+
+async function deleteCredential(hostName, loginUser) {
+  if (!(await uiStore.confirmAction(`${loginUser} credential을 삭제하시겠습니까?`, { title: 'Credential 삭제' })))
+    return
+  await apiDelete(`/api/admin/hosts/${hostName}/credentials/${encodeURIComponent(loginUser)}`)
+  await loadAll()
+}
+
+function onRtdFormHostChange() {
+  const options = loginUserOptionsFor(rtdForm.host_name)
+  if (!options.includes(rtdForm.login_user)) rtdForm.login_user = ''
+}
+
+function onEzdfsFormHostChange() {
+  const options = loginUserOptionsFor(ezdfsForm.host_name)
+  if (!options.includes(ezdfsForm.login_user)) ezdfsForm.login_user = ''
+}
+
+function onRtdDraftHostChange(item) {
+  const draft = rtdDraft(item)
+  if (!draft) return
+  const options = loginUserOptionsFor(draft.values.host_name)
+  if (!options.includes(draft.values.login_user)) draft.values.login_user = ''
+}
+
+function onEzdfsDraftHostChange(item) {
+  const draft = ezdfsDraft(item)
+  if (!draft) return
+  const options = loginUserOptionsFor(draft.values.host_name)
+  if (!options.includes(draft.values.login_user)) draft.values.login_user = ''
+}
+
 async function createRtdConfig() {
   await apiPost('/api/admin/rtd/configs', rtdForm)
   Object.assign(rtdForm, {
@@ -376,6 +527,7 @@ async function createRtdConfig() {
     business_unit: '',
     home_dir_path: '',
     host_name: '',
+    login_user: '',
   })
   await loadAll()
 }
@@ -393,6 +545,7 @@ function cancelRtdEdit(item) {
       business_unit: item.business_unit,
       home_dir_path: item.home_dir_path,
       host_name: item.host_name,
+      login_user: item.login_user,
     },
   }
 }
@@ -418,6 +571,7 @@ async function createEzdfsConfig() {
     port: 22,
     home_dir_path: '',
     host_name: '',
+    login_user: '',
   })
   await loadAll()
 }
@@ -434,6 +588,7 @@ function cancelEzdfsEdit(item) {
       port: item.port,
       home_dir_path: item.home_dir_path,
       host_name: item.host_name,
+      login_user: item.login_user,
     },
   }
 }
@@ -571,14 +726,13 @@ async function deleteEzdfs(moduleName) {
             <h3>Host 추가</h3>
             <label class="field"><span>Name</span><input v-model="hostForm.name" /></label>
             <label class="field"><span>IP</span><input v-model="hostForm.ip" /></label>
-            <label class="field"><span>Login User</span><input v-model="hostForm.login_user" /></label>
-            <label class="field"><span>Login Password</span><input v-model="hostForm.login_password" type="password" /></label>
             <button class="button button-primary" type="submit">등록</button>
           </form>
           <div class="table-wrap console-grid-table">
             <table class="data-table">
               <thead>
                 <tr>
+                  <th class="expand-col"></th>
                   <th class="sortable-header" @click="toggleHostSort('name')">
                     <div class="sortable-header-inner">
                       <span>Name</span>
@@ -591,13 +745,7 @@ async function deleteEzdfs(moduleName) {
                       <span class="sort-icon" v-bind="sortState(hostSortKey, hostSortOrder, 'ip')"></span>
                     </div>
                   </th>
-                  <th class="sortable-header" @click="toggleHostSort('login_user')">
-                    <div class="sortable-header-inner">
-                      <span>User</span>
-                      <span class="sort-icon" v-bind="sortState(hostSortKey, hostSortOrder, 'login_user')"></span>
-                    </div>
-                  </th>
-                  <th>Password</th>
+                  <th>Credentials</th>
                   <th>SSH Limit</th>
                   <th class="sortable-header" @click="toggleHostSort('modifier')">
                     <div class="sortable-header-inner">
@@ -609,85 +757,192 @@ async function deleteEzdfs(moduleName) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="host in sortedHosts" :key="host.name" :class="{ 'editing-row': isHostEditing(host) }">
-                  <td>
-                    <input v-if="hostDraft(host)?.editing" v-model="hostDraft(host).values.name" class="table-edit-input" />
-                    <span v-else class="ellipsis-cell" :title="host.name">{{ host.name }}</span>
-                  </td>
-                  <td>
-                    <input v-if="hostDraft(host)?.editing" v-model="hostDraft(host).values.ip" class="table-edit-input" />
-                    <span v-else class="ellipsis-cell" :title="host.ip">{{ host.ip }}</span>
-                  </td>
-                  <td>
-                    <input
-                      v-if="hostDraft(host)?.editing"
-                      v-model="hostDraft(host).values.login_user"
-                      class="table-edit-input"
-                    />
-                    <span v-else class="ellipsis-cell" :title="host.login_user">{{ host.login_user }}</span>
-                  </td>
-                  <td>
-                    <input
-                      v-if="hostDraft(host)?.editing"
-                      v-model="hostDraft(host).values.login_password"
-                      type="password"
-                      class="table-edit-input"
-                    />
-                    <span v-else>******</span>
-                  </td>
-                  <td>
-                    <div class="inline-edit-cell">
-                      <span
-                        class="ellipsis-cell"
-                        :title="hostSshLimitInfo(host.name)?.source === 'default'
-                          ? 'remote 감지 실패로 기본값 10 사용'
-                          : hostSshLimitInfo(host.name)?.source === 'remote'
-                            ? 'remote sshd 설정 기준 감지값'
-                            : '아직 감지되지 않음'"
-                      >
-                        {{ hostSshLimitLabel(host.name) }}
-                      </span>
+                <template v-for="host in sortedHosts" :key="host.name">
+                  <tr :class="{ 'editing-row': isHostEditing(host) }">
+                    <td class="expand-col">
                       <button
-                        class="edit-icon-button"
+                        class="expand-toggle-button"
                         type="button"
-                        :disabled="hostSshProbeLoading[host.name]"
-                        @click="probeHostSshLimit(host.name)"
+                        :aria-expanded="isHostExpanded(host.name)"
+                        @click="toggleHostExpand(host.name)"
                       >
-                        {{ hostSshProbeLoading[host.name] ? '...' : '감지' }}
+                        {{ isHostExpanded(host.name) ? '▼' : '▶' }}
                       </button>
-                    </div>
-                  </td>
-                  <td class="modifier-cell">
-                    <span class="modifier-text ellipsis-cell" :title="host.modifier">{{ host.modifier }}</span>
-                  </td>
-                  <td class="actions-cell">
-                    <div class="row-action-group">
-                      <button
-                        v-if="hostDraft(host)?.editing"
-                        class="button button-secondary"
-                        :disabled="!hostChanged(host)"
-                        @click="updateHost(host)"
-                      >
-                        반영
-                      </button>
-                      <button
-                        v-else
-                        class="button button-ghost"
-                        @click="toggleHostEdit(host)"
-                      >
-                        수정
-                      </button>
-                      <button
-                        v-if="hostDraft(host)?.editing"
-                        class="button button-ghost"
-                        @click="cancelHostEdit(host)"
-                      >
-                        취소
-                      </button>
-                      <button class="button button-danger" @click="deleteHost(host.name)">삭제</button>
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                    <td>
+                      <input v-if="hostDraft(host)?.editing" v-model="hostDraft(host).values.name" class="table-edit-input" />
+                      <span v-else class="ellipsis-cell" :title="host.name">{{ host.name }}</span>
+                    </td>
+                    <td>
+                      <input v-if="hostDraft(host)?.editing" v-model="hostDraft(host).values.ip" class="table-edit-input" />
+                      <span v-else class="ellipsis-cell" :title="host.ip">{{ host.ip }}</span>
+                    </td>
+                    <td>
+                      <span class="credential-count-badge">
+                        {{ credentialsFor(host.name).length }} user{{ credentialsFor(host.name).length === 1 ? '' : 's' }}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="inline-edit-cell">
+                        <span
+                          class="ellipsis-cell"
+                          :title="hostSshLimitInfo(host.name)?.source === 'default'
+                            ? 'remote 감지 실패로 기본값 10 사용'
+                            : hostSshLimitInfo(host.name)?.source === 'remote'
+                              ? 'remote sshd 설정 기준 감지값'
+                              : '아직 감지되지 않음'"
+                        >
+                          {{ hostSshLimitLabel(host.name) }}
+                        </span>
+                        <button
+                          class="edit-icon-button"
+                          type="button"
+                          :disabled="hostSshProbeLoading[host.name]"
+                          @click="probeHostSshLimit(host.name)"
+                        >
+                          {{ hostSshProbeLoading[host.name] ? '...' : '감지' }}
+                        </button>
+                      </div>
+                    </td>
+                    <td class="modifier-cell">
+                      <span class="modifier-text ellipsis-cell" :title="host.modifier">{{ host.modifier }}</span>
+                    </td>
+                    <td class="actions-cell">
+                      <div class="row-action-group">
+                        <button
+                          v-if="hostDraft(host)?.editing"
+                          class="button button-secondary"
+                          :disabled="!hostChanged(host)"
+                          @click="updateHost(host)"
+                        >
+                          반영
+                        </button>
+                        <button
+                          v-else
+                          class="button button-ghost"
+                          @click="toggleHostEdit(host)"
+                        >
+                          수정
+                        </button>
+                        <button
+                          v-if="hostDraft(host)?.editing"
+                          class="button button-ghost"
+                          @click="cancelHostEdit(host)"
+                        >
+                          취소
+                        </button>
+                        <button class="button button-danger" @click="deleteHost(host.name)">삭제</button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr v-if="isHostExpanded(host.name)" class="credential-subrow">
+                    <td></td>
+                    <td colspan="6">
+                      <div class="credential-sub-panel">
+                        <table class="credential-sub-table">
+                          <thead>
+                            <tr>
+                              <th>User</th>
+                              <th>Password</th>
+                              <th>Modifier</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="cred in credentialsFor(host.name)" :key="cred.login_user">
+                              <td>
+                                <input
+                                  v-if="isCredentialEditing(host.name, cred.login_user)"
+                                  v-model="credentialDraft(host.name, cred.login_user).values.login_user"
+                                  class="table-edit-input"
+                                />
+                                <span v-else>{{ cred.login_user }}</span>
+                              </td>
+                              <td>
+                                <input
+                                  v-if="isCredentialEditing(host.name, cred.login_user)"
+                                  v-model="credentialDraft(host.name, cred.login_user).values.login_password"
+                                  type="password"
+                                  placeholder="(변경 시 입력)"
+                                  class="table-edit-input"
+                                />
+                                <span v-else>******</span>
+                              </td>
+                              <td class="modifier-cell">
+                                <span class="modifier-text ellipsis-cell" :title="cred.modifier">{{ cred.modifier }}</span>
+                              </td>
+                              <td class="actions-cell">
+                                <div class="row-action-group">
+                                  <button
+                                    v-if="isCredentialEditing(host.name, cred.login_user)"
+                                    class="button button-secondary"
+                                    @click="updateCredential(host.name, cred.login_user)"
+                                  >
+                                    반영
+                                  </button>
+                                  <button
+                                    v-else
+                                    class="button button-ghost"
+                                    @click="toggleCredentialEdit(host.name, cred.login_user)"
+                                  >
+                                    수정
+                                  </button>
+                                  <button
+                                    v-if="isCredentialEditing(host.name, cred.login_user)"
+                                    class="button button-ghost"
+                                    @click="cancelCredentialEdit(host.name, cred.login_user)"
+                                  >
+                                    취소
+                                  </button>
+                                  <button
+                                    class="button button-danger"
+                                    @click="deleteCredential(host.name, cred.login_user)"
+                                  >
+                                    삭제
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            <tr v-if="!credentialsFor(host.name).length">
+                              <td colspan="4" class="muted">등록된 credential이 없습니다.</td>
+                            </tr>
+                            <tr v-if="credentialForm(host.name).visible" class="credential-add-row">
+                              <td>
+                                <input
+                                  v-model="credentialForm(host.name).login_user"
+                                  class="table-edit-input"
+                                  placeholder="login user"
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  v-model="credentialForm(host.name).login_password"
+                                  type="password"
+                                  class="table-edit-input"
+                                  placeholder="password"
+                                />
+                              </td>
+                              <td></td>
+                              <td class="actions-cell">
+                                <div class="row-action-group">
+                                  <button class="button button-secondary" @click="addCredential(host.name)">저장</button>
+                                  <button class="button button-ghost" @click="cancelCredentialForm(host.name)">취소</button>
+                                </div>
+                              </td>
+                            </tr>
+                            <tr v-else class="credential-add-row">
+                              <td colspan="4">
+                                <button class="button button-ghost credential-add-trigger" @click="showCredentialForm(host.name)">
+                                  + Add Credential
+                                </button>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                </template>
                 <tr v-if="!sortedHosts.length">
                   <td colspan="7" class="muted">표시할 Host 설정이 없습니다.</td>
                 </tr>
@@ -705,9 +960,16 @@ async function deleteEzdfs(moduleName) {
             <label class="field"><span>Home Path</span><input v-model="rtdForm.home_dir_path" /></label>
             <label class="field">
               <span>Host</span>
-              <select v-model="rtdForm.host_name">
+              <select v-model="rtdForm.host_name" @change="onRtdFormHostChange">
                 <option disabled value="">선택</option>
                 <option v-for="host in hostOptions" :key="host" :value="host">{{ host }}</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Login User</span>
+              <select v-model="rtdForm.login_user" :disabled="!rtdForm.host_name">
+                <option disabled value="">선택</option>
+                <option v-for="user in rtdLoginUserOptions" :key="user" :value="user">{{ user }}</option>
               </select>
             </label>
             <button class="button button-primary" type="submit">등록</button>
@@ -758,6 +1020,12 @@ async function deleteEzdfs(moduleName) {
                       <span class="sort-icon" v-bind="sortState(rtdSortKey, rtdSortOrder, 'host_name')"></span>
                     </div>
                   </th>
+                  <th class="sortable-header" @click="toggleRtdSort('login_user')">
+                    <div class="sortable-header-inner">
+                      <span>Login User</span>
+                      <span class="sort-icon" v-bind="sortState(rtdSortKey, rtdSortOrder, 'login_user')"></span>
+                    </div>
+                  </th>
                   <th class="sortable-header" @click="toggleRtdSort('modifier')">
                     <div class="sortable-header-inner">
                       <span>Modifier</span>
@@ -794,10 +1062,33 @@ async function deleteEzdfs(moduleName) {
                     <span v-else class="path-cell" :title="item.home_dir_path">{{ item.home_dir_path }}</span>
                   </td>
                   <td>
-                    <select v-if="rtdDraft(item)?.editing" v-model="rtdDraft(item).values.host_name" class="table-edit-select">
+                    <select
+                      v-if="rtdDraft(item)?.editing"
+                      v-model="rtdDraft(item).values.host_name"
+                      class="table-edit-select"
+                      @change="onRtdDraftHostChange(item)"
+                    >
                       <option v-for="host in hostOptions" :key="host" :value="host">{{ host }}</option>
                     </select>
                     <span v-else>{{ item.host_name }}</span>
+                  </td>
+                  <td>
+                    <select
+                      v-if="rtdDraft(item)?.editing"
+                      v-model="rtdDraft(item).values.login_user"
+                      class="table-edit-select"
+                      :disabled="!rtdDraft(item).values.host_name"
+                    >
+                      <option disabled value="">선택</option>
+                      <option
+                        v-for="user in loginUserOptionsFor(rtdDraft(item).values.host_name)"
+                        :key="user"
+                        :value="user"
+                      >
+                        {{ user }}
+                      </option>
+                    </select>
+                    <span v-else>{{ item.login_user }}</span>
                   </td>
                   <td class="modifier-cell">
                     <span class="modifier-text ellipsis-cell" :title="item.modifier">{{ item.modifier }}</span>
@@ -831,7 +1122,7 @@ async function deleteEzdfs(moduleName) {
                   </td>
                 </tr>
                 <tr v-if="!filteredRtdConfigs.length">
-                  <td colspan="7" class="muted">표시할 RTD 설정이 없습니다.</td>
+                  <td colspan="8" class="muted">표시할 RTD 설정이 없습니다.</td>
                 </tr>
               </tbody>
             </table>
@@ -846,9 +1137,16 @@ async function deleteEzdfs(moduleName) {
             <label class="field"><span>Home Path</span><input v-model="ezdfsForm.home_dir_path" /></label>
             <label class="field">
               <span>Host</span>
-              <select v-model="ezdfsForm.host_name">
+              <select v-model="ezdfsForm.host_name" @change="onEzdfsFormHostChange">
                 <option disabled value="">선택</option>
                 <option v-for="host in hostOptions" :key="host" :value="host">{{ host }}</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Login User</span>
+              <select v-model="ezdfsForm.login_user" :disabled="!ezdfsForm.host_name">
+                <option disabled value="">선택</option>
+                <option v-for="user in ezdfsLoginUserOptions" :key="user" :value="user">{{ user }}</option>
               </select>
             </label>
             <button class="button button-primary" type="submit">등록</button>
@@ -879,6 +1177,12 @@ async function deleteEzdfs(moduleName) {
                     <div class="sortable-header-inner">
                       <span>Host</span>
                       <span class="sort-icon" v-bind="sortState(ezdfsSortKey, ezdfsSortOrder, 'host_name')"></span>
+                    </div>
+                  </th>
+                  <th class="sortable-header" @click="toggleEzdfsSort('login_user')">
+                    <div class="sortable-header-inner">
+                      <span>Login User</span>
+                      <span class="sort-icon" v-bind="sortState(ezdfsSortKey, ezdfsSortOrder, 'login_user')"></span>
                     </div>
                   </th>
                   <th class="sortable-header" @click="toggleEzdfsSort('modifier')">
@@ -926,10 +1230,29 @@ async function deleteEzdfs(moduleName) {
                       v-if="ezdfsDraft(item)?.editing"
                       v-model="ezdfsDraft(item).values.host_name"
                       class="table-edit-select"
+                      @change="onEzdfsDraftHostChange(item)"
                     >
                       <option v-for="host in hostOptions" :key="host" :value="host">{{ host }}</option>
                     </select>
                     <span v-else class="ellipsis-cell" :title="item.host_name">{{ item.host_name }}</span>
+                  </td>
+                  <td>
+                    <select
+                      v-if="ezdfsDraft(item)?.editing"
+                      v-model="ezdfsDraft(item).values.login_user"
+                      class="table-edit-select"
+                      :disabled="!ezdfsDraft(item).values.host_name"
+                    >
+                      <option disabled value="">선택</option>
+                      <option
+                        v-for="user in loginUserOptionsFor(ezdfsDraft(item).values.host_name)"
+                        :key="user"
+                        :value="user"
+                      >
+                        {{ user }}
+                      </option>
+                    </select>
+                    <span v-else>{{ item.login_user }}</span>
                   </td>
                   <td class="modifier-cell">
                     <span class="modifier-text ellipsis-cell" :title="item.modifier">{{ item.modifier }}</span>
@@ -963,7 +1286,7 @@ async function deleteEzdfs(moduleName) {
                   </td>
                 </tr>
                 <tr v-if="!sortedEzdfsConfigs.length">
-                  <td colspan="6" class="muted">표시할 ezDFS 설정이 없습니다.</td>
+                  <td colspan="7" class="muted">표시할 ezDFS 설정이 없습니다.</td>
                 </tr>
               </tbody>
             </table>

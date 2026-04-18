@@ -5,13 +5,16 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin, get_db
 from app.core.responses import success_response
-from app.models.entities import EzdfsConfig, HostConfig, RtdConfig, User
+from app.models.entities import EzdfsConfig, HostConfig, HostCredential, RtdConfig, User
 from app.schemas.admin import (
     EzdfsConfigCreate,
     EzdfsConfigResponse,
     EzdfsConfigUpdate,
     HostConfigCreate,
     HostConfigResponse,
+    HostCredentialCreate,
+    HostCredentialResponse,
+    HostCredentialUpdate,
     HostSshLimitResponse,
     HostConfigUpdate,
     RoleUpdateRequest,
@@ -151,7 +154,6 @@ def create_host(
     db.add(host)
     db.commit()
     db.refresh(host)
-    probe_host_parallel_limit_info(host)
     return success_response({"host": HostConfigResponse.model_validate(host).model_dump()})
 
 
@@ -171,8 +173,6 @@ def update_host(
 
     host.name = payload.name
     host.ip = payload.ip
-    host.login_user = payload.login_user
-    host.login_password = payload.login_password
     host.modifier = current_admin.user_name
 
     db.query(RtdConfig).filter(RtdConfig.host_name == name).update({"host_name": payload.name}, synchronize_session=False)
@@ -181,7 +181,6 @@ def update_host(
     db.add(host)
     db.commit()
     db.refresh(host)
-    probe_host_parallel_limit_info(host)
     return success_response({"host": HostConfigResponse.model_validate(host).model_dump()})
 
 
@@ -195,7 +194,22 @@ def probe_host_ssh_limit(
     if host is None:
         raise HTTPException(status_code=404, detail="Host not found")
 
-    item = HostSshLimitResponse(**probe_host_parallel_limit_info(host)).model_dump()
+    if not host.credentials:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "success": False,
+                "error": {
+                    "code": "no_credential",
+                    "message": "Host has no registered credential to probe SSH limit",
+                },
+            },
+        )
+
+    primary = host.credentials[0]
+    item = HostSshLimitResponse(
+        **probe_host_parallel_limit_info(host, primary.login_user)
+    ).model_dump()
     return success_response({"item": item})
 
 
@@ -218,6 +232,152 @@ def delete_host(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.get("/hosts/{name}/credentials")
+def list_host_credentials(
+    name: str,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    host = db.query(HostConfig).filter(HostConfig.name == name).first()
+    if host is None:
+        raise HTTPException(status_code=404, detail="Host not found")
+    items = [HostCredentialResponse.model_validate(cred).model_dump() for cred in host.credentials]
+    return success_response({"items": items})
+
+
+@router.post("/hosts/{name}/credentials", status_code=status.HTTP_201_CREATED)
+def create_host_credential(
+    name: str,
+    payload: HostCredentialCreate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    host = db.query(HostConfig).filter(HostConfig.name == name).first()
+    if host is None:
+        raise HTTPException(status_code=404, detail="Host not found")
+
+    if not payload.login_user:
+        raise HTTPException(status_code=400, detail="login_user is required")
+
+    existing = (
+        db.query(HostCredential)
+        .filter(HostCredential.host_id == host.id, HostCredential.login_user == payload.login_user)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Credential already exists for this host")
+
+    credential = HostCredential(
+        host_id=host.id,
+        login_user=payload.login_user,
+        login_password=payload.login_password,
+        modifier=current_admin.user_name,
+    )
+    db.add(credential)
+    db.commit()
+    db.refresh(credential)
+    return success_response({"credential": HostCredentialResponse.model_validate(credential).model_dump()})
+
+
+@router.put("/hosts/{name}/credentials/{login_user}")
+def update_host_credential(
+    name: str,
+    login_user: str,
+    payload: HostCredentialUpdate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    host = db.query(HostConfig).filter(HostConfig.name == name).first()
+    if host is None:
+        raise HTTPException(status_code=404, detail="Host not found")
+
+    credential = (
+        db.query(HostCredential)
+        .filter(HostCredential.host_id == host.id, HostCredential.login_user == login_user)
+        .first()
+    )
+    if credential is None:
+        raise HTTPException(status_code=404, detail="Credential not found")
+
+    if payload.login_user != login_user:
+        conflict = (
+            db.query(HostCredential)
+            .filter(
+                HostCredential.host_id == host.id,
+                HostCredential.login_user == payload.login_user,
+            )
+            .first()
+        )
+        if conflict:
+            raise HTTPException(status_code=409, detail="Credential already exists for this host")
+
+        db.query(RtdConfig).filter(
+            RtdConfig.host_name == name,
+            RtdConfig.login_user == login_user,
+        ).update({"login_user": payload.login_user}, synchronize_session=False)
+        db.query(EzdfsConfig).filter(
+            EzdfsConfig.host_name == name,
+            EzdfsConfig.login_user == login_user,
+        ).update({"login_user": payload.login_user}, synchronize_session=False)
+
+    credential.login_user = payload.login_user
+    credential.login_password = payload.login_password
+    credential.modifier = current_admin.user_name
+
+    db.add(credential)
+    db.commit()
+    db.refresh(credential)
+    return success_response({"credential": HostCredentialResponse.model_validate(credential).model_dump()})
+
+
+@router.delete("/hosts/{name}/credentials/{login_user}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_host_credential(
+    name: str,
+    login_user: str,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    host = db.query(HostConfig).filter(HostConfig.name == name).first()
+    if host is None:
+        raise HTTPException(status_code=404, detail="Host not found")
+
+    credential = (
+        db.query(HostCredential)
+        .filter(HostCredential.host_id == host.id, HostCredential.login_user == login_user)
+        .first()
+    )
+    if credential is None:
+        raise HTTPException(status_code=404, detail="Credential not found")
+
+    referenced_rtd = db.query(RtdConfig).filter(
+        RtdConfig.host_name == name, RtdConfig.login_user == login_user
+    ).first()
+    referenced_ezdfs = db.query(EzdfsConfig).filter(
+        EzdfsConfig.host_name == name, EzdfsConfig.login_user == login_user
+    ).first()
+    if referenced_rtd or referenced_ezdfs:
+        raise HTTPException(
+            status_code=409, detail="Credential is referenced by another configuration"
+        )
+
+    db.delete(credential)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _validate_host_credential(db: Session, host_name: str, login_user: str) -> None:
+    host = db.query(HostConfig).filter(HostConfig.name == host_name).first()
+    if host is None:
+        raise HTTPException(status_code=404, detail="Referenced host not found")
+    credential = (
+        db.query(HostCredential)
+        .filter(HostCredential.host_id == host.id, HostCredential.login_user == login_user)
+        .first()
+    )
+    if credential is None:
+        raise HTTPException(status_code=404, detail="Referenced host credential not found")
+
+
 @router.get("/rtd/configs")
 def list_rtd_configs(
     _: User = Depends(get_current_admin),
@@ -237,8 +397,7 @@ def create_rtd_config(
     if existing:
         raise HTTPException(status_code=409, detail="RTD config already exists")
 
-    if db.query(HostConfig).filter(HostConfig.name == payload.host_name).first() is None:
-        raise HTTPException(status_code=404, detail="Referenced host not found")
+    _validate_host_credential(db, payload.host_name, payload.login_user)
 
     config = RtdConfig(**payload.model_dump(), modifier=current_admin.user_name)
     db.add(config)
@@ -261,14 +420,14 @@ def update_rtd_config(
     if payload.line_name != line_name and db.query(RtdConfig).filter(RtdConfig.line_name == payload.line_name).first():
         raise HTTPException(status_code=409, detail="RTD config already exists")
 
-    if db.query(HostConfig).filter(HostConfig.name == payload.host_name).first() is None:
-        raise HTTPException(status_code=404, detail="Referenced host not found")
+    _validate_host_credential(db, payload.host_name, payload.login_user)
 
     config.line_name = payload.line_name
     config.line_id = payload.line_id
     config.business_unit = payload.business_unit
     config.home_dir_path = payload.home_dir_path
     config.host_name = payload.host_name
+    config.login_user = payload.login_user
     config.modifier = current_admin.user_name
     db.add(config)
     db.commit()
@@ -309,8 +468,7 @@ def create_ezdfs_config(
     if existing:
         raise HTTPException(status_code=409, detail="ezDFS config already exists")
 
-    if db.query(HostConfig).filter(HostConfig.name == payload.host_name).first() is None:
-        raise HTTPException(status_code=404, detail="Referenced host not found")
+    _validate_host_credential(db, payload.host_name, payload.login_user)
 
     config = EzdfsConfig(**payload.model_dump(), modifier=current_admin.user_name)
     db.add(config)
@@ -333,13 +491,13 @@ def update_ezdfs_config(
     if payload.module_name != module_name and db.query(EzdfsConfig).filter(EzdfsConfig.module_name == payload.module_name).first():
         raise HTTPException(status_code=409, detail="ezDFS config already exists")
 
-    if db.query(HostConfig).filter(HostConfig.name == payload.host_name).first() is None:
-        raise HTTPException(status_code=404, detail="Referenced host not found")
+    _validate_host_credential(db, payload.host_name, payload.login_user)
 
     config.module_name = payload.module_name
     config.port = payload.port
     config.home_dir_path = payload.home_dir_path
     config.host_name = payload.host_name
+    config.login_user = payload.login_user
     config.modifier = current_admin.user_name
     db.add(config)
     db.commit()

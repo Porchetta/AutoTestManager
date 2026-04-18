@@ -11,12 +11,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.core.responses import success_response
 from app.models.entities import DashboardLike, RtdConfig, TestTask, User
-from app.services.file_service import (
-    generate_summary_file,
+from app.services.file_download import (
     get_ezdfs_raw_content_path,
     get_existing_download_path,
     get_rtd_raw_rule_file_map,
 )
+from app.services.file_service import generate_summary_file
 from app.services.task_service import ensure_task_owner, list_tasks_by_type, serialize_task
 from app.utils.enums import ActionType, TaskStatus, TestType
 from app.utils.constants import TARGET_SUFFIX

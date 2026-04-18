@@ -26,12 +26,12 @@ from app.services.catalog_service import (
     get_rules_by_line_name,
     get_target_lines_by_business_unit,
 )
-from app.services.file_service import (
+from app.services.file_download import (
     generate_aggregate_rtd_summary_file,
-    generate_summary_file,
     get_existing_download_path,
     get_rtd_raw_rule_file_map,
 )
+from app.services.file_service import generate_summary_file
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
 from app.services.svn_upload_custom import perform_rtd_svn_upload
 from app.services.task_service import (
@@ -39,9 +39,9 @@ from app.services.task_service import (
     ensure_task_owner,
     list_rtd_target_monitor_items,
     list_tasks_by_type,
-    queue_mock_task,
     serialize_task,
 )
+from app.services.task_worker import queue_mock_task
 from app.utils.enums import ActionType, TaskStep, TestType
 from app.utils.naming import normalize_target_line_name, sanitize_path_token
 

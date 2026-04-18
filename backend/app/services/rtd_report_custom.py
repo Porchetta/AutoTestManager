@@ -3,7 +3,7 @@ from __future__ import annotations
 """
 RTD report custom flow
 
-1. file_service.generate_aggregate_rtd_summary_file()가 완료된 RTD test task들을 모은다.
+1. file_download.generate_aggregate_rtd_summary_file()가 완료된 RTD test task들을 모은다.
 2. build_rtd_test_report_file()
    task 목록을 받아 Excel 결과서를 생성한다.
 3. _build_rtd_report_rows()
