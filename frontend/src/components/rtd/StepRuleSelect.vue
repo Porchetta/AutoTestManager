@@ -8,8 +8,6 @@ const rtdStore = useRtdStore();
 const uiStore = useUiStore();
 const {
   selectedRuleTargets,
-  selectedMacros,
-  macroReview,
   targetLines,
   rules,
   ruleVersions,
@@ -69,14 +67,7 @@ async function addRuleTarget() {
     new_version: ruleCandidateNewVersion.value,
     old_version: ruleCandidateOldVersion.value,
   });
-  selectedMacros.value = [];
-  macroReview.value = {
-    searched: false,
-    old_macros: [],
-    new_macros: [],
-    has_diff: false,
-    error: "",
-  };
+  rtdStore.resetMacroState();
   targetLines.value = [];
   rtdStore.syncMonitorRuleSelection();
   await rtdStore.saveSession();
@@ -90,14 +81,7 @@ async function addRuleTarget() {
 
 async function removeRuleTarget(index) {
   selectedRuleTargets.value.splice(index, 1);
-  selectedMacros.value = [];
-  macroReview.value = {
-    searched: false,
-    old_macros: [],
-    new_macros: [],
-    has_diff: false,
-    error: "",
-  };
+  rtdStore.resetMacroState();
   targetLines.value = [];
   rtdStore.syncMonitorRuleSelection();
   await rtdStore.saveSession();

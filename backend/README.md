@@ -173,25 +173,24 @@ Download :  api/mypage.py    → file_download.py      → (파일 경로 결정
 ### Catalog — `rtd_catalog_custom.py` / `ezdfs_catalog_custom.py`
 | 함수 | 역할 |
 |---|---|
-| `fetch_rule_source_file_names(...)` | 원격 서버의 rule 소스 파일 목록 조회 |
-| `parse_rule_catalog_entries(...)` | 파일명에서 `rule_name`, `version` 추출 |
-| `read_rule_source_text(...)` | rule 소스 텍스트 읽기 |
-| `extract_macro_list(...)` *(RTD)* | old/new `.report` 비교 Macro 리스트 |
-| `extract_sub_rule_list_from_rule_text(...)` *(ezDFS)* | Sub Rule 리스트 |
+| `get_rule_file_list(...)` | 원격 rule 파일 목록 조회 + 버전 파싱을 1-step으로 통합 (RTD/ezDFS 공통 이름) |
+| `get_macro_file_list(...)` *(RTD)* | 선택한 rule 파일이 참조하는 **전체** macro `.report` 목록 (diff 아님) |
+| `get_subrule_file_list(...)` *(ezDFS)* | 선택한 rule 파일이 재귀적으로 참조하는 sub rule `rule_name` 목록 (실제 파일은 `{rule_name}.rul` 규칙) |
+| `get_backup_file_list(...)` *(ezDFS)* | 백업 디렉토리 파일 목록 조회 및 최신 버전 탐색 |
+| `get_version_from_filename(...)` | 시스템별 파일명 포맷에서 `version` 문자열 추출 |
 
 ### Execution — `rtd_execution_custom.py` / `ezdfs_execution_custom.py`
 | 함수 | 역할 |
 |---|---|
-| `execute_copy_action(...)` | Rule 파일을 타겟 라인으로 복사 |
-| `execute_compile_action(...)` | `./atm_compiler ...` 실행 |
-| `execute_test_action(...)` *(RTD)* | `./atm_testscript ...` 실행 |
-| `execute_ezdfs_test_action(...)` | ezDFS 테스트 실행 |
+| `execute_copy_action(...)` *(RTD)* | 선택된 rule의 old/new 버전 + 참조 macro closure를 타겟 라인으로 복사 |
+| `execute_compile_action(...)` *(RTD)* | `./atm_compiler ...` 실행 (복사된 rule/macro 대상) |
+| `execute_test_action(...)` | RTD: `./atm_testscript ...` / ezDFS: `./ezDFS_test {rule}` (같은 이름 공유, caller가 모듈 경로로 구분) |
 
 ### Report — `rtd_report_custom.py` / `ezdfs_report_custom.py`
 | 함수 | 역할 |
 |---|---|
-| `build_rtd_test_report_file(...)` | 선택 라인 최신 결과 → `.xlsx` |
-| `build_ezdfs_test_report_file(...)` | 동일 (ezDFS) |
+| `build_rtd_test_report(...)` | 선택 라인 최신 결과 → `.xlsx` |
+| `build_ezdfs_test_report(...)` | 동일 (ezDFS) |
 
 ### SVN — `svn_upload_custom.py`
 | 함수 | 역할 |
@@ -226,6 +225,168 @@ Download :  api/mypage.py    → file_download.py      → (파일 경로 결정
 `except Exception` 은 **의도적인 광범위 catch** 입니다. 그 외에는 모두
 `paramiko.SSHException`, `json.JSONDecodeError`, `OSError` 등 **구체적**
 예외 타입을 잡습니다.
+
+---
+
+## Payload / Session 구조
+
+코드 곳곳에 `payload`, `request_payload`, `session_payload`, `payload["payload"]`
+처럼 비슷한 이름의 변수가 섞여 쓰입니다. 실제로는 **세 가지 서로 다른 dict**
+가 존재하고, 계층마다 역할이 다릅니다.
+
+### 전체 개요
+
+```
+ [1] HTTP 요청 body           [2] TestTask 에 저장된 스냅샷        [3] 런타임 세션 (DB)
+ RtdActionRequest  ─ save ─▶  TestTask.requested_payload_json ◀─┐   RuntimeSession.payload_json
+ EzdfsActionRequest          (JSON 문자열)                       │   (user × test_type 단일 row)
+     │                             │                              │            │
+     │ POST /api/rtd/copy          │ task_worker 가 json.loads    │            │ get_runtime_session_payload()
+     │                             ▼                              │            ▼
+     └──▶ api/rtd.py ─▶ task_service.create_task()                │     wizard 진행 중 매 step 마다
+                              (requested_payload dict 통째로 직렬화)│     upsert_runtime_session() 으로 갱신
+                                                                  │            │
+                                          extract_session_payload │◀───────────┘
+                                                                  ▼
+                                                      *_custom 함수 내부
+```
+
+세 dict 의 이름 관례:
+
+| 용어 | 정체 | 저장 위치 | 접근 방법 |
+|---|---|---|---|
+| `request_payload` | HTTP 요청 body 전체 (outer envelope) | `TestTask.requested_payload_json` 로 직렬화 | `json.loads(task.requested_payload_json)` |
+| `session_payload` *(task 문맥)* | 위 envelope 안의 실제 세션 스냅샷 | 상동 (envelope 의 `"payload"` 키) | `extract_session_payload(request_payload)` |
+| `session_payload` *(런타임)* | 현재 사용자의 wizard 세션 | `RuntimeSession.payload_json` | `get_runtime_session_payload(db, user_id, test_type)` |
+
+> 한 함수 안에서 `request_payload` 와 `session_payload` 가 **같은 변수명 `payload`**
+> 로 쓰이는 경우가 있습니다(특히 custom 함수의 파라미터가 `payload: dict`).
+> 이때 안에서 다시 `extract_session_payload(payload)` 를 호출해 **한 번 더
+> 껍질을 벗기는** 것이 관용 패턴입니다.
+
+### [1] HTTP 요청 body — `RtdActionRequest` / `EzdfsActionRequest`
+
+`app/schemas/testing.py` 의 Pydantic 모델:
+
+```python
+class RtdActionRequest(BaseModel):
+    target_lines: list[str] = Field(default_factory=list)
+    payload: dict[str, Any] = Field(default_factory=dict)   # ← 내부 세션 스냅샷
+
+class EzdfsActionRequest(BaseModel):
+    module_name: str
+    rule_name: str
+    payload: dict[str, Any] = Field(default_factory=dict)   # ← 내부 세션 스냅샷
+```
+
+- 바깥층(`target_lines` / `module_name` / `rule_name`) = **어디에 실행할지** 를
+  지정하는 핵심 식별자. 여러 target line 에 동일 task 를 fan-out 할 때 이 층에서 갈라집니다.
+- `.payload` 안쪽 = **세션 스냅샷** (`selected_rule_targets`, `selected_macros`,
+  `selected_line_name`, `major_change_items` …). 프론트가 `/rtd/session` 으로
+  저장해 두던 `RtdSessionPayload` 를 그대로 본떠 보냅니다.
+
+### [2] TestTask 에 저장되는 스냅샷 — `requested_payload_json`
+
+`task_service.create_task()` 은 들어온 ActionRequest 를 `model_dump()` 로 통째로
+직렬화해서 `TestTask.requested_payload_json` 에 저장합니다.
+
+```python
+# task_worker.run_task() 시작부
+payload = json.loads(task.requested_payload_json or "{}")
+# payload == {"target_lines": [...], "payload": { 세션 스냅샷 } }
+```
+
+이후 custom 함수로 이 `payload` 가 그대로 전달되므로, custom 안에서는 대체로
+다음 형태가 등장합니다:
+
+```python
+def execute_copy_action(db, task, payload):            # payload = request_payload envelope
+    session_payload = extract_session_payload(payload) # inner snapshot 으로 unwrap
+    rule_targets = session_payload.get("selected_rule_targets", [])
+    ...
+```
+
+`extract_session_payload()` (in `utils/ssh_helpers.py`) 는 단순히
+`payload["payload"]` 가 dict 면 그걸 반환하고, 아니면 원본을 그대로 돌려주는
+호환 헬퍼입니다. "이미 inner 인 경우"와 "outer 인 경우"를 함께 받기 위한
+방어 코드입니다.
+
+### [3] RuntimeSession — 사용자의 현재 wizard 상태
+
+`RuntimeSession` 테이블은 **(user_id, test_type) 단일 row** 로 wizard 전 step
+상태를 JSON 한 덩어리에 보관합니다. 새로고침/재로그인 후에도 같은 지점에서
+복귀할 수 있는 이유가 이것입니다.
+
+```python
+from app.services.session_service import (
+    get_runtime_session_payload,
+    upsert_runtime_session,
+)
+
+# 읽기
+session_payload = get_runtime_session_payload(db, user_id, TestType.RTD)
+# 쓰기
+upsert_runtime_session(db, user_id, TestType.RTD, session_payload)
+```
+
+RTD 런타임 세션에 들어 있는 주요 키 (`schemas/testing.py::RtdSessionPayload`):
+
+| 키 | 설명 | 채워지는 단계 |
+|---|---|---|
+| `current_step` | 현재 Wizard step | 각 step 저장 시 |
+| `selected_business_unit` | Step 1 선택 사업부 | Step 1 |
+| `selected_line_name` | Step 2 선택 dev line | Step 2 |
+| `selected_rules` | Step 3 선택 rule 이름 목록 | Step 3 |
+| `selected_rule_targets` | Step 3 각 rule 의 `{rule_name, old_version, new_version}` | Step 3 |
+| `selected_versions` | rule → version 단일 맵 (UI 편의) | Step 3 |
+| `selected_macros` | Step 4 macro 선택 결과 | Step 4 |
+| `macro_review` | `compare_macros_by_rule_targets` 결과 (old/new diff, rule_macro_map) | Step 4 |
+| `major_change_items` | rule 별 주요 변경 메모 | Step 4/6 |
+| `target_lines` | Step 5 타겟 라인 선택 | Step 5 |
+| `monitor_rule_selection` | Step 6 모니터 filter 상태 | Step 6 |
+| `active_task_ids` | 현재 실행 중 task id 목록 | Step 6 |
+| `svn_upload` | 마지막 SVN 업로드 메타 | SVN 완료 후 |
+| `catalog_cache` | 서버가 SSH 로 조회한 rule/version 스냅샷 | Rule 조회 시 |
+
+ezDFS 런타임 세션 (`EzdfsSessionPayload`) 의 주요 키:
+
+| 키 | 설명 |
+|---|---|
+| `selected_module` / `selected_rule` | Step 1/2 선택 |
+| `selected_rule_version` / `selected_rule_old_version` | 버전 메타 |
+| `selected_rule_file_name` | 선택된 deployed rule 파일명 |
+| `sub_rules_searched`, `sub_rules`, `sub_rule_map`, `selected_sub_rules` | Step 3 sub rule 탐색/선택 |
+| `major_change_items` | rule 별 변경 메모 |
+| `active_task_id` / `latest_status` | Step 4 실행 상태 |
+| `catalog_cache` | deployed/backup catalog 스냅샷 |
+| `svn_upload` | 마지막 SVN 업로드 메타 |
+
+### 누가 무엇을 읽는가
+
+| 장소 | 읽는 dict | 목적 |
+|---|---|---|
+| `api/rtd.py`, `api/ezdfs.py` (wizard 저장) | RuntimeSession | step 저장/복원 |
+| `api/rtd.py::_build_rtd_task_requests()` | ActionRequest → `request_payload` | task fan-out 시 target line 마다 같은 envelope 반복 사용 |
+| `task_service.create_task()` | `request_payload` | `requested_payload_json` 컬럼에 저장 |
+| `task_worker.run_task()` | `requested_payload_json` → `payload` | custom 함수에 그대로 전달 |
+| `*_execution_custom.execute_*()` | `payload` → `extract_session_payload()` | 실제 선택 rule/macro 조회 |
+| `*_report_custom.build_*()` | 각 task 의 `requested_payload_json` | 결과서 row 구성 |
+| `svn_upload_custom.py` | RuntimeSession | 업로드 대상/메타 조회 |
+| `file_service.py`, `file_download.py` | RuntimeSession + `requested_payload_json` | 최신 선택 rule 반영한 결과서 만들 때 |
+
+### 관용 패턴 요약
+
+- **API 계층**: `payload = model_dump()` 로 얻은 dict 를 그대로 `request_payload`
+  라고 부르며 task service 로 넘깁니다.
+- **Worker 계층**: `payload = json.loads(task.requested_payload_json)` 로 outer
+  envelope 을 복원합니다. 변수명은 `payload` 이지만 내용은 `request_payload` 입니다.
+- **Custom 계층**: 함수 파라미터 이름도 `payload` 로 받지만,
+  내부에서 첫 줄에 `session_payload = extract_session_payload(payload)` 를
+  호출해 inner snapshot 만 따로 씁니다.
+- **RuntimeSession** 은 위 흐름과 **별개**로 wizard 상태를 독립 저장합니다.
+  task envelope 에 찍힌 세션 스냅샷과 그 이후 사용자가 수정한 런타임 세션이
+  **달라질 수 있다**는 점에 유의 — 결과서 생성 단계에서 "현재 세션의 값을
+  우선 적용"하는 fallback 이 여기저기 들어가 있는 이유입니다.
 
 ---
 

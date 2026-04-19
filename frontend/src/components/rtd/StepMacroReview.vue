@@ -6,12 +6,8 @@ import { useUiStore } from "../../stores/ui";
 
 const rtdStore = useRtdStore();
 const uiStore = useUiStore();
-const {
-  selectedLineName,
-  selectedRuleTargets,
-  selectedMacros,
-  macroReview,
-} = storeToRefs(rtdStore);
+const { selectedLineName, selectedRuleTargets, macroReview } =
+  storeToRefs(rtdStore);
 
 const macroSearchLoading = ref(false);
 
@@ -42,48 +38,6 @@ async function searchMacros() {
   } finally {
     macroSearchLoading.value = false;
   }
-}
-
-function isMacroSelected(macroName) {
-  return selectedMacros.value.includes(macroName);
-}
-
-async function toggleMacroSelection(macroName, checked) {
-  if (!macroName) return;
-
-  if (checked) {
-    if (!selectedMacros.value.includes(macroName)) {
-      selectedMacros.value = [...selectedMacros.value, macroName];
-    }
-  } else {
-    selectedMacros.value = selectedMacros.value.filter(
-      (item) => item !== macroName,
-    );
-  }
-
-  await rtdStore.saveSession();
-}
-
-async function selectAllMacros(macroType) {
-  const sourceItems =
-    macroType === "old"
-      ? macroReview.value.old_macros
-      : macroReview.value.new_macros;
-  const merged = [...new Set([...selectedMacros.value, ...sourceItems])];
-  selectedMacros.value = merged;
-  await rtdStore.saveSession();
-}
-
-async function clearAllMacros(macroType) {
-  const sourceItems =
-    macroType === "old"
-      ? macroReview.value.old_macros
-      : macroReview.value.new_macros;
-  const sourceSet = new Set(sourceItems);
-  selectedMacros.value = selectedMacros.value.filter(
-    (item) => !sourceSet.has(item),
-  );
-  await rtdStore.saveSession();
 }
 </script>
 
@@ -124,22 +78,6 @@ async function clearAllMacros(macroType) {
               >{{ macroReview.old_macros.length }} Items</span
             >
           </div>
-          <div class="macro-card-actions">
-            <button
-              class="button button-ghost macro-card-action"
-              :disabled="!macroReview.old_macros.length"
-              @click="selectAllMacros('old')"
-            >
-              전체선택
-            </button>
-            <button
-              class="button button-ghost macro-card-action"
-              :disabled="!macroReview.old_macros.length"
-              @click="clearAllMacros('old')"
-            >
-              전체 해제
-            </button>
-          </div>
         </div>
         <div
           class="stack-list macro-stack-list"
@@ -151,13 +89,6 @@ async function clearAllMacros(macroType) {
             class="stack-item macro-select-item"
           >
             <span class="macro-select-label">{{ item }}</span>
-            <label class="macro-check">
-              <input
-                :checked="isMacroSelected(item)"
-                type="checkbox"
-                @change="toggleMacroSelection(item, $event.target.checked)"
-              />
-            </label>
           </div>
         </div>
         <p v-else class="muted">차이가 있는 Old Macro가 없습니다.</p>
@@ -171,22 +102,6 @@ async function clearAllMacros(macroType) {
               >{{ macroReview.new_macros.length }} Items</span
             >
           </div>
-          <div class="macro-card-actions">
-            <button
-              class="button button-ghost macro-card-action"
-              :disabled="!macroReview.new_macros.length"
-              @click="selectAllMacros('new')"
-            >
-              전체선택
-            </button>
-            <button
-              class="button button-ghost macro-card-action"
-              :disabled="!macroReview.new_macros.length"
-              @click="clearAllMacros('new')"
-            >
-              전체 해제
-            </button>
-          </div>
         </div>
         <div
           class="stack-list macro-stack-list"
@@ -198,20 +113,13 @@ async function clearAllMacros(macroType) {
             class="stack-item macro-select-item"
           >
             <span class="macro-select-label">{{ item }}</span>
-            <label class="macro-check">
-              <input
-                :checked="isMacroSelected(item)"
-                type="checkbox"
-                @change="toggleMacroSelection(item, $event.target.checked)"
-              />
-            </label>
           </div>
         </div>
         <p v-else class="muted">차이가 있는 New Macro가 없습니다.</p>
       </div>
     </div>
     <p v-if="macroReview.searched && !macroReview.error" class="muted">
-      선택된 Macro만 복사 대상에 포함됩니다.
+      Old/New 버전 간 변경된 Macro 파일이 자동으로 포함됩니다.
     </p>
   </div>
 </template>

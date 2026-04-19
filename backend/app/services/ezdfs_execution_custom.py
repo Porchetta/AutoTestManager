@@ -4,7 +4,7 @@ from __future__ import annotations
 ezDFS execution custom flow
 
 1. task_service가 ezDFS TEST / RETEST task를 시작한다.
-2. execute_ezdfs_test_action()
+2. execute_test_action()
    요청 payload에서 module과 rule을 꺼낸다.
 3. _get_ezdfs_module_context()
    module 설정과 SSH host 정보를 조회한다.
@@ -26,7 +26,7 @@ from app.services.ssh_runtime import open_limited_ssh_client
 from app.utils.ssh_helpers import build_clean_bash_command, extract_session_payload
 
 
-def execute_ezdfs_test_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
+def execute_test_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
     """
     Execute one ezDFS TEST / RETEST task for a selected module and rule.
 

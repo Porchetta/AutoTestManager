@@ -21,9 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConfigNotFoundError, RemoteCommandError, SSHConnectionError
 from app.models.entities import HostConfig, RtdConfig, TestTask
-from app.services.session_service import get_runtime_session_payload
 from app.services.ssh_runtime import open_limited_ssh_client
-from app.utils.enums import TestType
 from app.utils.naming import normalize_target_line_name
 from app.utils.ssh_helpers import build_clean_bash_command, extract_session_payload, run_remote_command
 
@@ -64,8 +62,8 @@ def execute_copy_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
     source_config, source_host = _get_rtd_line_context(db, dev_line_name)
     target_config, target_host = _get_rtd_line_context(db, task.target_name)
 
-    rule_file_names = _collect_rule_file_names(db, task.user_id, source_config.line_name, session_payload)
-    macro_file_names = _collect_macro_file_names(session_payload)
+    rule_file_names = _collect_rule_file_names_from_payload(session_payload)
+    macro_file_names = _collect_macro_file_names_from_payload(session_payload)
 
     if not rule_file_names:
         raise ValueError("No rule files resolved for copy action")
@@ -133,7 +131,7 @@ def execute_compile_action(db: Session, task: TestTask, payload: dict[str, Any])
     session_payload = extract_session_payload(payload)
     config, host = _get_rtd_line_context(db, task.target_name)
     rule_names = _collect_selected_rule_names(session_payload)
-    macro_names = _collect_macro_file_names(session_payload)
+    macro_names = _collect_macro_file_names_from_payload(session_payload)
     if not rule_names:
         raise ValueError("selected_rule_targets is required for compile action")
 
@@ -225,78 +223,67 @@ def _get_rtd_line_context(db: Session, line_name: str) -> tuple[RtdConfig, HostC
     return config, host
 
 
-def _collect_rule_file_names(
-    db: Session,
-    user_id: str,
-    line_name: str,
-    session_payload: dict[str, Any],
-) -> list[str]:
+def _collect_rule_file_names_from_payload(session_payload: dict[str, Any]) -> list[str]:
     """
-    Resolve selected rule/report filenames from the cached RTD catalog.
+    Resolve rule/report filenames directly from session payload.
 
-    Input:
-    - db, user_id: Used to load the cached catalog stored in runtime session.
-    - line_name: Dev line whose catalog cache should be used.
-    - session_payload: RTD payload that contains `selected_rule_targets`.
-
-    Returns:
-    - list[str]: Unique report filenames for both old/new selected versions.
+    `selected_rule_targets[*]` is expected to carry `old_file_name` and
+    `new_file_name` for each rule (recorded at the Rule-select step).
+    Missing filenames raise ValueError listing the offending rule:version.
     """
-    runtime_payload = get_runtime_session_payload(db, user_id, TestType.RTD)
-    catalog_cache = runtime_payload.get("catalog_cache", {})
-    if catalog_cache.get("line_name") != line_name:
-        raise ValueError("Rule catalog cache is missing or does not match the selected line")
-
-    selected_rule_targets = _sorted_selected_rule_targets(session_payload)
     rule_files: list[str] = []
     seen: set[str] = set()
     missing_items: list[str] = []
 
-    for item in selected_rule_targets:
-        rule_name = item.get("rule_name")
+    for item in _sorted_selected_rule_targets(session_payload):
+        rule_name = str(item.get("rule_name", "")).strip()
         if not rule_name:
             continue
 
-        for version_key in ("old_version", "new_version"):
-            version = item.get(version_key)
+        for version_key, file_key in (
+            ("old_version", "old_file_name"),
+            ("new_version", "new_file_name"),
+        ):
+            version = str(item.get(version_key, "")).strip()
+            file_name = str(item.get(file_key, "")).strip()
             if not version:
                 continue
-
-            file_name = _find_catalog_file_name(catalog_cache, rule_name, version)
             if not file_name:
                 missing_items.append(f"{rule_name}:{version}")
                 continue
-
             if file_name in seen:
                 continue
-
             seen.add(file_name)
             rule_files.append(file_name)
 
     if missing_items:
         raise ValueError(
-            "Rule file not found in session cache for: " + ", ".join(sorted(missing_items))
+            "Rule file name missing in selected_rule_targets for: "
+            + ", ".join(sorted(missing_items))
         )
 
     return rule_files
 
 
-def _collect_macro_file_names(session_payload: dict[str, Any]) -> list[str]:
+def _collect_macro_file_names_from_payload(session_payload: dict[str, Any]) -> list[str]:
     """
-    Collect selected macro/report names in stable first-seen order.
+    Collect the full macro closure from session payload.
 
-    Behavior:
-    - prefers explicit `selected_macros`
-    - falls back to macro diff results if explicit selection is absent
-    - removes duplicates and `error`
+    Reads `selected_macros.per_rule[*].old_macros + new_macros` union in
+    first-seen order. copy / compile targets are the full per-rule closure.
     """
-    macro_items = session_payload.get("selected_macros", [])
-    if not macro_items and "selected_macros" not in session_payload:
-        macro_review = session_payload.get("macro_review", {})
-        macro_items = [
-            *macro_review.get("old_macros", []),
-            *macro_review.get("new_macros", []),
-        ]
+    selected_macros = session_payload.get("selected_macros")
+    macro_items: list[str] = []
+
+    if isinstance(selected_macros, dict):
+        per_rule = selected_macros.get("per_rule")
+        if isinstance(per_rule, list):
+            for entry in per_rule:
+                if not isinstance(entry, dict):
+                    continue
+                for key in ("old_macros", "new_macros"):
+                    for name in entry.get(key, []) or []:
+                        macro_items.append(name)
 
     seen: set[str] = set()
     result: list[str] = []
@@ -342,14 +329,6 @@ def _sorted_selected_rule_targets(session_payload: dict[str, Any]) -> list[dict[
             str(item.get("old_version", "")).strip().lower(),
         ),
     )
-
-
-def _find_catalog_file_name(catalog_cache: dict[str, Any], rule_name: str, version: str) -> str | None:
-    """Find the report filename for one `rule_name + version` pair in the cached catalog."""
-    for item in catalog_cache.get("files", []):
-        if item.get("rule_name") == rule_name and item.get("version") == version:
-            return item.get("file_name")
-    return None
 
 
 def _copy_files_between_hosts(

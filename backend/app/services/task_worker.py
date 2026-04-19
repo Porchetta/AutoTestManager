@@ -18,12 +18,11 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.entities import TestTask
-from app.services.ezdfs_execution_custom import execute_ezdfs_test_action
+from app.services import ezdfs_execution_custom, rtd_execution_custom
 from app.services.file_service import generate_raw_file
 from app.services.rtd_execution_custom import (
     execute_compile_action,
     execute_copy_action,
-    execute_test_action,
 )
 from app.services.task_queue import (
     build_rtd_queue_key,
@@ -137,10 +136,10 @@ def _run_custom_action(db: Session, task: TestTask, payload: dict) -> dict[str, 
         if task.action_type == ActionType.COMPILE.value:
             return execute_compile_action(db, task, payload)
         if task.action_type in {ActionType.TEST.value, ActionType.RETEST.value}:
-            return execute_test_action(db, task, payload)
+            return rtd_execution_custom.execute_test_action(db, task, payload)
 
     if task.test_type == TestType.EZDFS.value:
         if task.action_type in {ActionType.TEST.value, ActionType.RETEST.value}:
-            return execute_ezdfs_test_action(db, task, payload)
+            return ezdfs_execution_custom.execute_test_action(db, task, payload)
 
     return {"message": f"{task.action_type.title()} completed", "raw_output": ""}

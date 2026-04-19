@@ -103,14 +103,13 @@ def compare_macros(
     except (ValueError, OSError, RuntimeError) as exc:
         result = {
             "searched": True,
-            "old_macros": ["error"],
-            "new_macros": ["error"],
-            "has_diff": False,
+            "per_rule": [],
+            "has_any": False,
             "error": str(exc),
         }
 
     session_payload = get_runtime_session_payload(db, current_user.user_id, TestType.RTD)
-    session_payload["macro_review"] = result
+    session_payload["selected_macros"] = result
     upsert_runtime_session(db, current_user.user_id, TestType.RTD, session_payload)
     return success_response(result)
 
@@ -156,8 +155,65 @@ def save_session(
     if cached_catalog and cached_catalog.get("line_name") == session_payload.get("selected_line_name"):
         session_payload["catalog_cache"] = cached_catalog
 
+    _enrich_selected_rule_targets_with_file_names(session_payload)
+
     session = upsert_runtime_session(db, current_user.user_id, TestType.RTD, session_payload)
     return success_response({"session": session})
+
+
+def _enrich_selected_rule_targets_with_file_names(session_payload: dict) -> None:
+    """
+    Attach `old_file_name` / `new_file_name` to each selected rule target by
+    matching against the cached RTD catalog. Execution layer reads filenames
+    from payload only, so this must be written at rule-select time.
+    """
+    catalog_files = (
+        session_payload.get("catalog_cache", {}).get("files", [])
+        if isinstance(session_payload.get("catalog_cache"), dict)
+        else []
+    )
+    if not isinstance(catalog_files, list):
+        return
+
+    selected = session_payload.get("selected_rule_targets")
+    if not isinstance(selected, list):
+        return
+
+    def lookup(rule_name: str, version: str) -> str:
+        if not rule_name or not version:
+            return ""
+        for entry in catalog_files:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("rule_name") == rule_name and entry.get("version") == version:
+                return str(entry.get("file_name") or "")
+        return ""
+
+    for item in selected:
+        if not isinstance(item, dict):
+            continue
+        rule_name = str(item.get("rule_name") or "").strip()
+        old_version = str(item.get("old_version") or "").strip()
+        new_version = str(item.get("new_version") or "").strip()
+        item["old_file_name"] = lookup(rule_name, old_version)
+        item["new_file_name"] = lookup(rule_name, new_version)
+
+
+def _attach_catalog_cache_to_action_payload(db: Session, current_user: User, action_payload: dict) -> None:
+    """
+    Copy `catalog_cache` from the stored runtime session into an action
+    payload when the client-side payload does not carry it. Enrichment of
+    `selected_rule_targets[*].{old,new}_file_name` relies on this cache.
+    """
+    if not isinstance(action_payload, dict):
+        return
+    cache = action_payload.get("catalog_cache")
+    if isinstance(cache, dict) and cache.get("files"):
+        return
+    stored = get_runtime_session_payload(db, current_user.user_id, TestType.RTD)
+    stored_cache = stored.get("catalog_cache") if isinstance(stored, dict) else None
+    if isinstance(stored_cache, dict) and stored_cache.get("files"):
+        action_payload["catalog_cache"] = stored_cache
 
 
 @router.delete("/session")
@@ -191,6 +247,9 @@ def _create_rtd_tasks(
         raise HTTPException(status_code=422, detail="target_lines is required")
     if action_type in {ActionType.TEST, ActionType.RETEST} and not payload.payload.get("selected_rule_targets"):
         raise HTTPException(status_code=422, detail="selected_rule_targets is required")
+
+    _attach_catalog_cache_to_action_payload(db, current_user, payload.payload)
+    _enrich_selected_rule_targets_with_file_names(payload.payload)
 
     target_lines = payload.target_lines
     if action_type == ActionType.COPY:

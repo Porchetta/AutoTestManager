@@ -7,18 +7,14 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import EzdfsConfig, HostConfig, RtdConfig, User
 from app.services.ezdfs_catalog_custom import (
-    fetch_backup_rule_source_file_names as fetch_ezdfs_backup_rule_source_file_names,
-    fetch_rule_source_file_names as fetch_ezdfs_rule_source_file_names,
     find_latest_backup_version,
-    parse_rule_catalog_entries as parse_ezdfs_rule_catalog_entries,
-    read_rule_source_text as read_ezdfs_rule_source_text,
-    resolve_recursive_sub_rule_list,
+    get_backup_file_list as get_ezdfs_backup_file_list,
+    get_rule_file_list as get_ezdfs_rule_file_list,
+    get_subrule_file_list as get_ezdfs_subrule_file_list,
 )
 from app.services.rtd_catalog_custom import (
-    extract_macro_list,
-    fetch_rule_source_file_names,
-    parse_rule_catalog_entries,
-    read_rule_source_text,
+    get_macro_file_list,
+    get_rule_file_list,
 )
 from app.services.session_service import get_runtime_session_payload, upsert_runtime_session
 from app.utils.constants import RULE_ERROR_ITEM
@@ -74,11 +70,7 @@ def compare_macros_by_rule_targets(
     selected_rule_targets: list[dict[str, str]],
 ) -> dict:
     if not selected_rule_targets:
-        return {
-            "old_macros": [],
-            "new_macros": [],
-            "has_diff": False,
-        }
+        return {"per_rule": [], "has_any": False}
 
     config = db.query(RtdConfig).filter(RtdConfig.line_name == line_name).first()
     if config is None:
@@ -88,14 +80,12 @@ def compare_macros_by_rule_targets(
     if host is None:
         raise ValueError("RTD host config not found")
 
-    old_macro_diff: list[str] = []
-    new_macro_diff: list[str] = []
-    rule_macro_map: dict[str, dict[str, list[str]]] = {}
+    per_rule: list[dict[str, object]] = []
 
     for item in selected_rule_targets:
-        rule_name = item.get("rule_name", "")
-        old_version = item.get("old_version", "")
-        new_version = item.get("new_version", "")
+        rule_name = str(item.get("rule_name") or "").strip()
+        old_version = str(item.get("old_version") or "").strip()
+        new_version = str(item.get("new_version") or "").strip()
         if not rule_name or not old_version or not new_version:
             continue
 
@@ -106,22 +96,19 @@ def compare_macros_by_rule_targets(
 
         old_macros = get_macro_list_by_rule_name(db, current_user, line_name, rule_name, old_version)
         new_macros = get_macro_list_by_rule_name(db, current_user, line_name, rule_name, new_version)
-        old_diff_items = _filter_macros_in_order(old_macros, new_macros)
-        new_diff_items = _filter_macros_in_order(new_macros, old_macros)
-        old_macro_diff = _merge_macros_in_order(old_macro_diff, old_diff_items)
-        new_macro_diff = _merge_macros_in_order(new_macro_diff, new_diff_items)
-        rule_macro_map[rule_name] = {
-            "old_macros": old_diff_items,
-            "new_macros": new_diff_items,
-            "all_macros": _merge_macros_in_order(old_diff_items, new_diff_items),
-        }
 
-    return {
-        "old_macros": old_macro_diff,
-        "new_macros": new_macro_diff,
-        "rule_macro_map": rule_macro_map,
-        "has_diff": bool(old_macro_diff or new_macro_diff),
-    }
+        per_rule.append(
+            {
+                "rule_name": rule_name,
+                "old_version": old_version,
+                "new_version": new_version,
+                "old_macros": old_macros,
+                "new_macros": new_macros,
+            }
+        )
+
+    has_any = any(entry["old_macros"] or entry["new_macros"] for entry in per_rule)
+    return {"per_rule": per_rule, "has_any": has_any}
 
 
 def get_macro_list_by_rule_name(
@@ -143,33 +130,7 @@ def get_macro_list_by_rule_name(
     if not file_name:
         raise ValueError("Rule file not found in session cache")
 
-    content = read_rule_source_text(host, config.login_user, config.home_dir_path, file_name)
-    return extract_macro_list(host, config.home_dir_path, content, rule_name)
-
-
-def _filter_macros_in_order(source_macros: list[str], excluded_macros: list[str]) -> list[str]:
-    excluded = {str(item or "").strip() for item in excluded_macros if str(item or "").strip()}
-    result: list[str] = []
-    seen: set[str] = set()
-    for macro_name in source_macros:
-        normalized = str(macro_name or "").strip()
-        if not normalized or normalized in excluded or normalized in seen:
-            continue
-        seen.add(normalized)
-        result.append(normalized)
-    return result
-
-
-def _merge_macros_in_order(primary_macros: list[str], secondary_macros: list[str]) -> list[str]:
-    result: list[str] = []
-    seen: set[str] = set()
-    for macro_name in [*primary_macros, *secondary_macros]:
-        normalized = str(macro_name or "").strip()
-        if not normalized or normalized in seen:
-            continue
-        seen.add(normalized)
-        result.append(normalized)
-    return result
+    return get_macro_file_list(host, config.login_user, config.home_dir_path, file_name)
 
 
 def get_target_lines_by_business_unit(db: Session, business_unit: str, current_user: User) -> list[str]:
@@ -211,18 +172,12 @@ def get_ezdfs_sub_rules(
     if not resolved_file_name:
         raise ValueError("ezDFS rule file not found in session cache")
 
-    content = read_ezdfs_rule_source_text(host, config.login_user, config.home_dir_path, resolved_file_name)
-    selected_entry = next(
-        (item for item in catalog.get("files", []) if item.get("file_name") == resolved_file_name),
-        None,
-    )
-    return resolve_recursive_sub_rule_list(
+    return get_ezdfs_subrule_file_list(
         host,
         config.login_user,
         config.home_dir_path,
-        content,
-        catalog.get("files", []),
-        preferred_version=str(selected_entry.get("version", "")) if selected_entry else "",
+        resolved_file_name,
+        catalog_files=catalog.get("files", []),
     )
 
 
@@ -309,8 +264,7 @@ def _fetch_rtd_catalog_over_ssh(db: Session, line_name: str) -> dict:
     if host is None:
         raise ValueError("RTD host config not found")
 
-    remote_files = fetch_rule_source_file_names(host, config.login_user, config.home_dir_path)
-    catalog_files = parse_rule_catalog_entries(remote_files)
+    catalog_files = get_rule_file_list(host, config.login_user, config.home_dir_path)
     versions_by_rule = _group_versions_by_rule(catalog_files)
     rules = sorted(versions_by_rule.keys(), key=str.lower)
 
@@ -332,11 +286,9 @@ def _fetch_ezdfs_catalog_over_ssh(db: Session, module_name: str) -> dict:
     if host is None:
         raise ValueError("ezDFS host config not found")
 
-    remote_files = fetch_ezdfs_rule_source_file_names(host, config.login_user, config.home_dir_path)
-    catalog_files = parse_ezdfs_rule_catalog_entries(remote_files)
+    catalog_files = get_ezdfs_rule_file_list(host, config.login_user, config.home_dir_path)
     try:
-        backup_remote_files = fetch_ezdfs_backup_rule_source_file_names(host, config.login_user, config.home_dir_path)
-        backup_catalog_files = parse_ezdfs_rule_catalog_entries(backup_remote_files)
+        backup_catalog_files = get_ezdfs_backup_file_list(host, config.login_user, config.home_dir_path)
     except (OSError, RuntimeError):
         backup_catalog_files = []
     files_with_old_version = [
@@ -429,9 +381,6 @@ def _normalize_ezdfs_catalog_entries(items: list) -> list[dict[str, str]]:
             for item in items
             if _is_valid_ezdfs_catalog_entry(item)
         ]
-
-    if all(isinstance(item, str) for item in items):
-        return parse_ezdfs_rule_catalog_entries(items)
 
     return []
 

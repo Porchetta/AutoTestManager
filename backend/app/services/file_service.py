@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.entities import RtdConfig, TestTask
-from app.services.ezdfs_report_custom import build_ezdfs_test_report_file
-from app.services.rtd_report_custom import build_rtd_test_report_file
+from app.services.ezdfs_report_custom import build_ezdfs_test_report
+from app.services.rtd_report_custom import build_rtd_test_report
 from app.services.session_service import get_runtime_session_payload
 from app.utils.enums import TaskStatus, TestType
 from app.utils.naming import normalize_target_line_name, sanitize_path_token
@@ -108,7 +108,7 @@ def generate_summary_file(db: Session, task: TestTask) -> Path:
             if isinstance(runtime_payload.get("major_change_items"), dict)
             else {}
         )
-        build_ezdfs_test_report_file(task, file_path, None, fallback_major_change_items)
+        build_ezdfs_test_report(task, file_path, None, fallback_major_change_items)
         task.summary_result_path = str(file_path)
         db.add(task)
         db.commit()
@@ -122,7 +122,7 @@ def generate_summary_file(db: Session, task: TestTask) -> Path:
             if isinstance(runtime_payload.get("major_change_items"), dict)
             else {}
         )
-        build_rtd_test_report_file([task], file_path, fallback_major_change_items)
+        build_rtd_test_report([task], file_path, fallback_major_change_items)
         task.summary_result_path = str(file_path)
         db.add(task)
         db.commit()

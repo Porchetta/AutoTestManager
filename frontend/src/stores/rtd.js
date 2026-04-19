@@ -4,21 +4,31 @@ import { defineStore } from 'pinia'
 import { apiDelete, apiGet, apiPost, apiPut, downloadFile } from '../api'
 import { waitForTaskTerminalStatus } from '../composables/useTaskPolling'
 
+const EMPTY_MACRO_STATE = () => ({
+  searched: false,
+  per_rule: [],
+  has_any: false,
+  error: '',
+})
+
+function computeRuleDiff(entry) {
+  const oldList = Array.isArray(entry?.old_macros) ? entry.old_macros : []
+  const newList = Array.isArray(entry?.new_macros) ? entry.new_macros : []
+  const oldSet = new Set(oldList)
+  const newSet = new Set(newList)
+  return {
+    old_diff: oldList.filter((item) => !newSet.has(item)),
+    new_diff: newList.filter((item) => !oldSet.has(item)),
+  }
+}
+
 export const useRtdStore = defineStore('rtd', () => {
   const currentStep = ref(1)
   const selectedBusinessUnit = ref('')
   const selectedLineName = ref('')
   const selectedRuleTargets = ref([])
-  const selectedMacros = ref([])
+  const selectedMacros = ref(EMPTY_MACRO_STATE())
   const majorChangeItems = ref({})
-  const macroReview = ref({
-    searched: false,
-    old_macros: [],
-    new_macros: [],
-    rule_macro_map: {},
-    has_diff: false,
-    error: '',
-  })
   const targetLines = ref([])
   const monitorRuleSelection = ref({})
   const tasks = ref([])
@@ -37,6 +47,39 @@ export const useRtdStore = defineStore('rtd', () => {
     [...new Set(selectedRuleTargets.value.map((item) => item.rule_name).filter(Boolean))]
   )
 
+  const macroReview = computed(() => {
+    const perRule = Array.isArray(selectedMacros.value?.per_rule)
+      ? selectedMacros.value.per_rule
+      : []
+    const oldDiffSet = new Set()
+    const newDiffSet = new Set()
+    const oldDiffList = []
+    const newDiffList = []
+    for (const entry of perRule) {
+      const { old_diff, new_diff } = computeRuleDiff(entry)
+      for (const item of old_diff) {
+        if (!oldDiffSet.has(item)) {
+          oldDiffSet.add(item)
+          oldDiffList.push(item)
+        }
+      }
+      for (const item of new_diff) {
+        if (!newDiffSet.has(item)) {
+          newDiffSet.add(item)
+          newDiffList.push(item)
+        }
+      }
+    }
+    return {
+      searched: Boolean(selectedMacros.value?.searched),
+      error: String(selectedMacros.value?.error || ''),
+      per_rule: perRule,
+      old_macros: oldDiffList,
+      new_macros: newDiffList,
+      has_diff: oldDiffList.length > 0 || newDiffList.length > 0,
+    }
+  })
+
   function normalizeTargetLineName(lineName) {
     return String(lineName || '').replace(/_TARGET\b/gi, '')
   }
@@ -50,7 +93,6 @@ export const useRtdStore = defineStore('rtd', () => {
     selected_macros: selectedMacros.value,
     selected_versions: {},
     major_change_items: majorChangeItems.value,
-    macro_review: macroReview.value,
     target_lines: targetLines.value,
     monitor_rule_selection: monitorRuleSelection.value,
     active_task_ids: tasks.value.map((task) => task.task_id),
@@ -112,15 +154,7 @@ export const useRtdStore = defineStore('rtd', () => {
 
   async function loadMacroReview() {
     if (!selectedLineName.value || !selectedRuleTargets.value.length) {
-      selectedMacros.value = []
-      macroReview.value = {
-        searched: false,
-        old_macros: [],
-        new_macros: [],
-        rule_macro_map: {},
-        has_diff: false,
-        error: '',
-      }
+      selectedMacros.value = EMPTY_MACRO_STATE()
       return false
     }
 
@@ -130,36 +164,32 @@ export const useRtdStore = defineStore('rtd', () => {
         selected_rule_targets: selectedRuleTargets.value,
       })
 
-      const allMacros = [...new Set([...(result.old_macros || []), ...(result.new_macros || [])])]
-      selectedMacros.value = allMacros
-
-      macroReview.value = {
+      selectedMacros.value = {
         searched: true,
-        old_macros: result.old_macros || [],
-        new_macros: result.new_macros || [],
-        rule_macro_map: result.rule_macro_map || {},
-        has_diff: Boolean(result.has_diff),
+        per_rule: Array.isArray(result.per_rule) ? result.per_rule : [],
+        has_any: Boolean(result.has_any),
         error: result.error || '',
       }
       return true
     } catch (error) {
-      selectedMacros.value = []
       const detail =
         error?.response?.data?.error?.message ||
         error?.response?.data?.detail ||
         error?.message ||
         'Macro 조회에 실패했습니다.'
 
-      macroReview.value = {
+      selectedMacros.value = {
         searched: true,
-        old_macros: [],
-        new_macros: [],
-        rule_macro_map: {},
-        has_diff: false,
+        per_rule: [],
+        has_any: false,
         error: typeof detail === 'string' ? detail : 'Macro 조회에 실패했습니다.',
       }
       return false
     }
+  }
+
+  function resetMacroState() {
+    selectedMacros.value = EMPTY_MACRO_STATE()
   }
 
   async function saveSession() {
@@ -178,16 +208,18 @@ export const useRtdStore = defineStore('rtd', () => {
         new_version: '',
         old_version: '',
       }))
-    selectedMacros.value = Array.isArray(session.selected_macros) ? session.selected_macros : []
-    majorChangeItems.value = session.major_change_items || {}
-    macroReview.value = {
-      searched: Boolean(session.macro_review?.searched),
-      old_macros: session.macro_review?.old_macros || [],
-      new_macros: session.macro_review?.new_macros || [],
-      rule_macro_map: session.macro_review?.rule_macro_map || {},
-      has_diff: Boolean(session.macro_review?.has_diff),
-      error: session.macro_review?.error || '',
+    const storedMacros = session.selected_macros
+    if (storedMacros && typeof storedMacros === 'object' && !Array.isArray(storedMacros)) {
+      selectedMacros.value = {
+        searched: Boolean(storedMacros.searched),
+        per_rule: Array.isArray(storedMacros.per_rule) ? storedMacros.per_rule : [],
+        has_any: Boolean(storedMacros.has_any),
+        error: String(storedMacros.error || ''),
+      }
+    } else {
+      selectedMacros.value = EMPTY_MACRO_STATE()
     }
+    majorChangeItems.value = session.major_change_items || {}
     targetLines.value = session.target_lines || []
     monitorRuleSelection.value = session.monitor_rule_selection || {}
     compileVisibilityMap.value = session.compile_visibility_map || {}
@@ -204,9 +236,8 @@ export const useRtdStore = defineStore('rtd', () => {
   function resetAfterBusinessUnit() {
     selectedLineName.value = ''
     selectedRuleTargets.value = []
-    selectedMacros.value = []
+    resetMacroState()
     majorChangeItems.value = {}
-    macroReview.value = { searched: false, old_macros: [], new_macros: [], rule_macro_map: {}, has_diff: false, error: '' }
     targetLines.value = []
     monitorRuleSelection.value = {}
     copyVisibilityMap.value = {}
@@ -221,9 +252,8 @@ export const useRtdStore = defineStore('rtd', () => {
 
   function resetAfterLine() {
     selectedRuleTargets.value = []
-    selectedMacros.value = []
+    resetMacroState()
     majorChangeItems.value = {}
-    macroReview.value = { searched: false, old_macros: [], new_macros: [], rule_macro_map: {}, has_diff: false, error: '' }
     targetLines.value = []
     monitorRuleSelection.value = {}
     copyVisibilityMap.value = {}
@@ -261,17 +291,25 @@ export const useRtdStore = defineStore('rtd', () => {
         ...sessionPayload.value,
         selected_rules: [],
         selected_rule_targets: [],
-        selected_macros: [],
+        selected_macros: EMPTY_MACRO_STATE(),
       }
     }
-    const allowedMacros = new Set(macroReview.value.rule_macro_map?.[normalizedRule]?.all_macros || [])
-    const filteredMacros = selectedMacros.value.filter((item) => allowedMacros.has(item))
+    const filteredPerRule = (selectedMacros.value?.per_rule || []).filter(
+      (entry) => entry?.rule_name === normalizedRule,
+    )
 
     return {
       ...sessionPayload.value,
       selected_rules: filteredRuleTargets.map((item) => item.rule_name),
       selected_rule_targets: filteredRuleTargets,
-      selected_macros: filteredMacros,
+      selected_macros: {
+        searched: Boolean(selectedMacros.value?.searched),
+        per_rule: filteredPerRule,
+        has_any: filteredPerRule.some(
+          (entry) => (entry?.old_macros?.length || 0) + (entry?.new_macros?.length || 0) > 0,
+        ),
+        error: String(selectedMacros.value?.error || ''),
+      },
     }
   }
 
@@ -331,7 +369,6 @@ export const useRtdStore = defineStore('rtd', () => {
     ).items.map((item) => {
       const result = { ...item }
 
-      // copy visibility filtering
       const copyStatus = item.copy?.status
       if (copyStatus === 'RUNNING' || copyStatus === 'PENDING') {
         copyVisibilityMap.value[item.target_name] = true
@@ -339,7 +376,6 @@ export const useRtdStore = defineStore('rtd', () => {
         result.copy = { ...(item.copy || {}), ...idleAction }
       }
 
-      // compile visibility filtering
       const compileStatus = item.compile?.status
       if (compileStatus === 'RUNNING' || compileStatus === 'PENDING') {
         compileVisibilityMap.value[item.target_name] = true
@@ -347,7 +383,6 @@ export const useRtdStore = defineStore('rtd', () => {
         result.compile = { ...(item.compile || {}), ...idleAction }
       }
 
-      // test visibility filtering
       const testStatus = item.test?.status
       if (testStatus === 'RUNNING' || testStatus === 'PENDING') {
         testVisibilityMap.value[item.target_name] = true
@@ -409,16 +444,8 @@ export const useRtdStore = defineStore('rtd', () => {
     selectedBusinessUnit.value = ''
     selectedLineName.value = ''
     selectedRuleTargets.value = []
-    selectedMacros.value = []
+    resetMacroState()
     majorChangeItems.value = {}
-    macroReview.value = {
-      searched: false,
-      old_macros: [],
-      new_macros: [],
-      rule_macro_map: {},
-      has_diff: false,
-      error: '',
-    }
     targetLines.value = []
     monitorRuleSelection.value = {}
     monitorItems.value = []
@@ -476,6 +503,7 @@ export const useRtdStore = defineStore('rtd', () => {
     loadRules,
     loadRuleVersions,
     loadMacroReview,
+    resetMacroState,
     saveSession,
     restoreSession,
     resetAfterBusinessUnit,

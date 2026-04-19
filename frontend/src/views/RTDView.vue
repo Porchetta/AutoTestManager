@@ -21,7 +21,6 @@ const {
   selectedBusinessUnit,
   selectedLineName,
   selectedRuleTargets,
-  selectedMacros,
   macroReview,
   targetLines,
   svnUpload,
@@ -68,7 +67,7 @@ const selectionStats = computed(() => [
       ? "미탐색"
       : macroReview.value.error
         ? "오류"
-        : `${selectedMacros.value.length}개`,
+        : `${macroReview.value.old_macros.length + macroReview.value.new_macros.length}개`,
   },
   {
     label: "타겟 라인",

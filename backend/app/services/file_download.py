@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.entities import RtdConfig, TestTask
-from app.services.ezdfs_report_custom import build_ezdfs_test_report_file
+from app.services.ezdfs_report_custom import build_ezdfs_test_report
 from app.services.file_service import _build_ezdfs_raw_file_name
-from app.services.rtd_report_custom import build_rtd_test_report_file
+from app.services.rtd_report_custom import build_rtd_test_report
 from app.services.session_service import get_runtime_session_payload
 from app.utils.constants import TARGET_SUFFIX
 from app.utils.enums import TaskStatus, TestType
@@ -143,7 +143,7 @@ def generate_aggregate_rtd_summary_file(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     business_unit_token = _build_business_unit_token(db, target_set)
     output_path = report_dir / f"{business_unit_token}-{timestamp}.xlsx"
-    return build_rtd_test_report_file(
+    return build_rtd_test_report(
         latest_tasks,
         output_path,
         fallback_major_change_items,
@@ -204,7 +204,7 @@ def generate_aggregate_ezdfs_summary_file(
         if isinstance(runtime_payload.get("major_change_items"), dict)
         else {}
     )
-    return build_ezdfs_test_report_file(
+    return build_ezdfs_test_report(
         done_tasks,
         output_path,
         selected_rule_names,
@@ -220,7 +220,7 @@ def _pick_latest_rtd_tasks_per_rule(
     """
     Filter tasks to the newest one covering each (line, rule_name) pair.
 
-    Why: `build_rtd_test_report_file` already dedups by (line, rule_name) with
+    Why: `build_rtd_test_report` already dedups by (line, rule_name) with
     first-seen-wins logic on a newest-first stream, but it still iterates every
     historical task. This helper pre-filters so only the tasks that actually
     contribute a row make it through.

@@ -211,20 +211,22 @@ system (RTD and ezDFS):
 ### 1. Catalog Custom
 `rtd_catalog_custom.py`, `ezdfs_catalog_custom.py`
 - Discover and parse rule files from remote servers via SSH
-- Key functions: `fetch_rule_source_file_names()`, `parse_rule_catalog_entries()`,
-  `read_rule_source_text()`, `extract_macro_list()` (RTD) /
-  `extract_sub_rule_list_from_rule_text()` (ezDFS)
+- RTD key functions: `get_rule_file_list()`, `get_macro_file_list()`,
+  `get_version_from_filename()`
+- ezDFS key functions: `get_rule_file_list()`, `get_subrule_file_list()`,
+  `get_backup_file_list()`, `get_version_from_filename()`
 
 ### 2. Execution Custom
 `rtd_execution_custom.py`, `ezdfs_execution_custom.py`
 - Run copy, compile, and test commands on remote hosts
 - Key functions: `execute_copy_action()`, `execute_compile_action()`,
-  `execute_test_action()` / `execute_ezdfs_test_action()`
+  `execute_test_action()` (RTD and ezDFS share the same name; callers
+  disambiguate by module path)
 
 ### 3. Report Custom
 `rtd_report_custom.py`, `ezdfs_report_custom.py`
 - Generate Excel reports from completed test tasks
-- Key functions: `build_rtd_test_report_file()` / `build_ezdfs_test_report_file()`
+- Key functions: `build_rtd_test_report()` / `build_ezdfs_test_report()`
 
 ### Call Chain
 ```

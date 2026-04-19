@@ -83,11 +83,11 @@ def perform_rtd_svn_upload(
         if isinstance(session_payload.get("selected_rule_targets"), list)
         else []
     )
-    selected_macros = (
-        session_payload.get("selected_macros")
-        if isinstance(session_payload.get("selected_macros"), list)
-        else []
-    )
+    selected_macros_raw = session_payload.get("selected_macros")
+    if isinstance(selected_macros_raw, dict):
+        macro_per_rule = selected_macros_raw.get("per_rule") or []
+    else:
+        macro_per_rule = []
     if not line_name:
         raise ValueError("selected_line_name is required for SVN Upload")
     if not selected_rule_targets:
@@ -129,12 +129,7 @@ def perform_rtd_svn_upload(
             file_name,
         )
 
-    macro_review = session_payload.get("macro_review") or {}
-    new_macros = set(macro_review.get("new_macros") or [])
-
-    for macro_file_name in _collect_selected_macro_file_names(selected_macros):
-        if macro_file_name not in new_macros:
-            continue
+    for macro_file_name in _collect_new_macro_file_names_from_per_rule(macro_per_rule):
         file_contents[macro_file_name] = _read_rtd_macro_source_bytes(
             host,
             config.login_user,
@@ -439,17 +434,24 @@ def _extract_svn_no(output: str) -> str:
     return str(match.group(1)) if match else ""
 
 
-def _collect_selected_macro_file_names(selected_macros: list[object]) -> list[str]:
-    """Return selected RTD macro/report file names in stable first-seen order."""
+def _collect_new_macro_file_names_from_per_rule(per_rule: list[object]) -> list[str]:
+    """
+    Collect macro file names that are new in the new version (per-rule diff:
+    `new_macros` − `old_macros`), union across rules, first-seen order.
+    """
 
     seen: set[str] = set()
     result: list[str] = []
-    for item in selected_macros:
-        normalized = str(item or "").strip()
-        if not normalized or normalized == "error" or normalized in seen:
+    for entry in per_rule:
+        if not isinstance(entry, dict):
             continue
-        seen.add(normalized)
-        result.append(normalized)
+        old_macros = {str(item or "").strip() for item in (entry.get("old_macros") or []) if str(item or "").strip()}
+        for item in entry.get("new_macros") or []:
+            normalized = str(item or "").strip()
+            if not normalized or normalized == "error" or normalized in seen or normalized in old_macros:
+                continue
+            seen.add(normalized)
+            result.append(normalized)
     return result
 
 
