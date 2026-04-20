@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -94,6 +94,21 @@ class EzdfsConfig(TimestampMixin, Base):
 
 class TestTask(TimestampMixin, Base):
     __tablename__ = "test_tasks"
+    __table_args__ = (
+        Index(
+            "ix_test_tasks_user_type_requested",
+            "user_id", "test_type", "requested_at",
+        ),
+        Index(
+            "ix_test_tasks_user_type_target",
+            "user_id", "test_type", "target_name",
+        ),
+        Index(
+            "ix_test_tasks_active",
+            "status", "requested_at", "id",
+            sqlite_where=text("status IN ('RUNNING','PENDING')"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     task_id: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)

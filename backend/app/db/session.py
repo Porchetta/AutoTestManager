@@ -57,6 +57,25 @@ def _ensure_legacy_columns():
         if "login_user" in host_columns and "login_password" in host_columns:
             _migrate_host_credentials(connection)
 
+        _ensure_test_task_indexes(connection)
+
+
+def _ensure_test_task_indexes(connection) -> None:
+    connection.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_test_tasks_user_type_requested "
+        "ON test_tasks (user_id, test_type, requested_at)"
+    ))
+    connection.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_test_tasks_user_type_target "
+        "ON test_tasks (user_id, test_type, target_name)"
+    ))
+    connection.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_test_tasks_active "
+        "ON test_tasks (status, requested_at, id) "
+        "WHERE status IN ('RUNNING','PENDING')"
+    ))
+    connection.execute(text("ANALYZE test_tasks"))
+
 
 def _migrate_host_credentials(connection) -> None:
     legacy_hosts = connection.execute(

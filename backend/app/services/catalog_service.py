@@ -159,7 +159,7 @@ def get_ezdfs_sub_rules(
     if rule_name == RULE_ERROR_ITEM:
         return [RULE_ERROR_ITEM]
 
-    catalog = _get_or_fetch_ezdfs_catalog(db, current_user, module_name)
+    catalog = _get_or_fetch_ezdfs_catalog(db, current_user, module_name, force_refresh=True)
     config = db.query(EzdfsConfig).filter(EzdfsConfig.module_name == module_name).first()
     if config is None:
         raise ValueError("ezDFS config not found")

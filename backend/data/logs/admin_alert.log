@@ -131,3 +131,5 @@
 2026-04-18 16:43:53 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
 2026-04-19 13:11:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
 2026-04-19 14:38:18 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-20 15:02:26 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-20 15:10:14 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
