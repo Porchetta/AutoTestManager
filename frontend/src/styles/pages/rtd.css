@@ -609,6 +609,17 @@
   color: var(--text);
 }
 
+.operation-button-step-sync {
+  background: color-mix(in srgb, var(--accent) 4%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  color: var(--text-soft);
+}
+.operation-button-step-sync:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  color: var(--text);
+}
+
 .operation-button-step-2 {
   background: color-mix(in srgb, var(--accent) 8%, var(--panel));
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));

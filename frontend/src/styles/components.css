@@ -90,7 +90,7 @@
 }
 
 .monitor-board {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .compact-grid {
@@ -737,7 +737,7 @@
 
 .console-grid-table {
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow: auto;
 }
 
 .console-grid-table .data-table {

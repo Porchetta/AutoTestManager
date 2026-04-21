@@ -45,6 +45,10 @@ async function run(action) {
     uiStore.setNotice("개발 라인은 복사 대상에서 제외되었습니다.");
     return;
   }
+  if (action !== "copy" && !items.length) {
+    uiStore.setError(`${action.toUpperCase()} 요청을 생성하지 못했습니다.`);
+    return;
+  }
   await rtdStore.refreshMonitor();
   uiStore.setNotice(`${action.toUpperCase()} 요청이 등록되었습니다.`);
 }
@@ -85,6 +89,21 @@ async function executeAllProcess() {
         );
         return;
       }
+    }
+
+    const syncItems = await rtdStore.executeAction("sync");
+    if (!syncItems.length) {
+      uiStore.setError("Sync 요청을 생성하지 못했습니다.");
+      return;
+    }
+    const syncResults = await rtdStore.waitForTaskIds(
+      syncItems.map((item) => item.task_id),
+    );
+    if (syncResults.some((item) => item.status !== "DONE")) {
+      uiStore.setError(
+        "Sync 단계에서 실패가 발생해 전체 실행을 중단했습니다.",
+      );
+      return;
     }
 
     const compileItems = await rtdStore.executeAction("compile");
@@ -150,6 +169,15 @@ async function executeAllProcess() {
                 @click="run('copy')"
               >
                 <strong>복사</strong>
+              </button>
+            </div>
+            <span class="operation-process-arrow" aria-hidden="true">→</span>
+            <div class="operation-process-step">
+              <button
+                class="button operation-button operation-button-step-sync"
+                @click="run('sync')"
+              >
+                <strong>Sync</strong>
               </button>
             </div>
             <span class="operation-process-arrow" aria-hidden="true">→</span>

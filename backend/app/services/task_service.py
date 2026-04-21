@@ -237,6 +237,11 @@ def _build_rtd_target_monitor_item(
         [ActionType.COPY.value],
         include_finished=True,
     )
+    latest_sync_task = _select_latest_task_for_actions(
+        filtered_tasks,
+        [ActionType.SYNC.value],
+        include_finished=True,
+    )
     latest_compile_task = _select_latest_task_for_actions(filtered_tasks, [ActionType.COMPILE.value])
     latest_test_task = _select_latest_task_for_actions(
         filtered_tasks,
@@ -263,6 +268,7 @@ def _build_rtd_target_monitor_item(
         "status": active_task.status if active_task else "IDLE",
         "status_text": _build_current_status_text(active_task, user_name_map),
         "copy": _serialize_monitor_action(latest_copy_task, "복사"),
+        "sync": _serialize_monitor_action(latest_sync_task, "Sync"),
         "compile": _serialize_monitor_action(latest_compile_task, "컴파일"),
         "test": _serialize_monitor_action(latest_test_task, "테스트"),
         "selected_rule": selected_rule,
@@ -316,6 +322,7 @@ def _build_current_status_text(task: TestTask | None, user_name_map: dict[str, s
 
     action_label = "테스트" if task.action_type == ActionType.RETEST.value else {
         ActionType.COPY.value: "복사",
+        ActionType.SYNC.value: "Sync",
         ActionType.COMPILE.value: "컴파일",
         ActionType.TEST.value: "테스트",
     }.get(task.action_type, task.action_type)

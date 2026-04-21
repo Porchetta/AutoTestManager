@@ -34,6 +34,7 @@ export const useRtdStore = defineStore('rtd', () => {
   const tasks = ref([])
   const monitorItems = ref([])
   const copyVisibilityMap = ref({})
+  const syncVisibilityMap = ref({})
   const compileVisibilityMap = ref({})
   const testVisibilityMap = ref({})
   const svnUpload = ref({})
@@ -96,6 +97,7 @@ export const useRtdStore = defineStore('rtd', () => {
     target_lines: targetLines.value,
     monitor_rule_selection: monitorRuleSelection.value,
     active_task_ids: tasks.value.map((task) => task.task_id),
+    sync_visibility_map: syncVisibilityMap.value,
     compile_visibility_map: compileVisibilityMap.value,
     test_visibility_map: testVisibilityMap.value,
     svn_upload: svnUpload.value,
@@ -222,6 +224,7 @@ export const useRtdStore = defineStore('rtd', () => {
     majorChangeItems.value = session.major_change_items || {}
     targetLines.value = session.target_lines || []
     monitorRuleSelection.value = session.monitor_rule_selection || {}
+    syncVisibilityMap.value = session.sync_visibility_map || {}
     compileVisibilityMap.value = session.compile_visibility_map || {}
     testVisibilityMap.value = session.test_visibility_map || {}
     svnUpload.value = session.svn_upload || {}
@@ -241,6 +244,7 @@ export const useRtdStore = defineStore('rtd', () => {
     targetLines.value = []
     monitorRuleSelection.value = {}
     copyVisibilityMap.value = {}
+    syncVisibilityMap.value = {}
     compileVisibilityMap.value = {}
     testVisibilityMap.value = {}
     svnUpload.value = {}
@@ -257,6 +261,7 @@ export const useRtdStore = defineStore('rtd', () => {
     targetLines.value = []
     monitorRuleSelection.value = {}
     copyVisibilityMap.value = {}
+    syncVisibilityMap.value = {}
     compileVisibilityMap.value = {}
     testVisibilityMap.value = {}
     svnUpload.value = {}
@@ -334,6 +339,11 @@ export const useRtdStore = defineStore('rtd', () => {
         copyVisibilityMap.value[line] = true
       }
     }
+    if (action === 'sync') {
+      for (const line of lines) {
+        syncVisibilityMap.value[line] = true
+      }
+    }
     if (action === 'compile') {
       for (const line of lines) {
         compileVisibilityMap.value[line] = true
@@ -374,6 +384,13 @@ export const useRtdStore = defineStore('rtd', () => {
         copyVisibilityMap.value[item.target_name] = true
       } else if (!((copyStatus === 'DONE' || copyStatus === 'FAIL') && copyVisibilityMap.value[item.target_name])) {
         result.copy = { ...(item.copy || {}), ...idleAction }
+      }
+
+      const syncStatus = item.sync?.status
+      if (syncStatus === 'RUNNING' || syncStatus === 'PENDING') {
+        syncVisibilityMap.value[item.target_name] = true
+      } else if (!((syncStatus === 'DONE' || syncStatus === 'FAIL') && syncVisibilityMap.value[item.target_name])) {
+        result.sync = { ...(item.sync || {}), ...idleAction }
       }
 
       const compileStatus = item.compile?.status
@@ -450,6 +467,7 @@ export const useRtdStore = defineStore('rtd', () => {
     monitorRuleSelection.value = {}
     monitorItems.value = []
     copyVisibilityMap.value = {}
+    syncVisibilityMap.value = {}
     compileVisibilityMap.value = {}
     testVisibilityMap.value = {}
     lines.value = []

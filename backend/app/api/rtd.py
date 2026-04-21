@@ -297,6 +297,16 @@ def copy_action(
     return _create_rtd_tasks(background_tasks, db, current_user, payload, ActionType.COPY, TaskStep.COPYING)
 
 
+@router.post("/actions/sync")
+def sync_action(
+    payload: RtdActionRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _create_rtd_tasks(background_tasks, db, current_user, payload, ActionType.SYNC, TaskStep.SYNCING)
+
+
 @router.post("/actions/compile")
 def compile_action(
     payload: RtdActionRequest,

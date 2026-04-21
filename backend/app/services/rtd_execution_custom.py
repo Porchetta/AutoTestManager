@@ -104,6 +104,38 @@ def execute_copy_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
     }
 
 
+def execute_sync_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
+    """
+    Run `./class_sync_file.sh` in the target line's home directory.
+
+    Input:
+    - db: SQLAlchemy session used to resolve RTD config and host info.
+    - task: The RTD SYNC task. `task.target_name` identifies the line.
+    - payload: Original task request payload (unused; kept for signature parity).
+
+    Returns:
+    - dict[str, str]:
+      - message: Sync summary shown in the monitor overlay
+      - raw_output: Remote stdout for debugging
+
+    Behavior:
+    - resolves one target line and host
+    - executes `./class_sync_file.sh` from the line's home_dir_path
+    """
+    del payload
+    config, host = _get_rtd_line_context(db, task.target_name)
+    output = run_remote_command(host, config.login_user, config.home_dir_path, "./class_sync_file.sh")
+
+    return {
+        "message": (
+            f"Sync completed\n"
+            f"line={config.line_name}"
+            f"{_summarize_remote_outputs([output])}"
+        ),
+        "raw_output": output,
+    }
+
+
 def execute_compile_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
     """
     Compile selected macro reports first, then selected rule reports.

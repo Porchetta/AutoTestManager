@@ -36,6 +36,7 @@ def requires_ezdfs_module_queue(task: TestTask, payload: dict) -> bool:
 def requires_rtd_line_queue(task: TestTask) -> bool:
     return task.test_type == TestType.RTD.value and task.action_type in {
         ActionType.COPY.value,
+        ActionType.SYNC.value,
         ActionType.COMPILE.value,
         ActionType.TEST.value,
         ActionType.RETEST.value,

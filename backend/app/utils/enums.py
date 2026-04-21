@@ -10,6 +10,7 @@ class TestType(str, Enum):
 
 class ActionType(str, Enum):
     COPY = "COPY"
+    SYNC = "SYNC"
     COMPILE = "COMPILE"
     TEST = "TEST"
     RETEST = "RETEST"
@@ -27,5 +28,6 @@ class TaskStatus(str, Enum):
 class TaskStep(str, Enum):
     READY = "READY"
     COPYING = "COPYING"
+    SYNCING = "SYNCING"
     COMPILING = "COMPILING"
     TESTING = "TESTING"

@@ -23,6 +23,7 @@ from app.services.file_service import generate_raw_file
 from app.services.rtd_execution_custom import (
     execute_compile_action,
     execute_copy_action,
+    execute_sync_action,
 )
 from app.services.task_queue import (
     build_rtd_queue_key,
@@ -133,6 +134,8 @@ def _run_custom_action(db: Session, task: TestTask, payload: dict) -> dict[str, 
     if task.test_type == TestType.RTD.value:
         if task.action_type == ActionType.COPY.value:
             return execute_copy_action(db, task, payload)
+        if task.action_type == ActionType.SYNC.value:
+            return execute_sync_action(db, task, payload)
         if task.action_type == ActionType.COMPILE.value:
             return execute_compile_action(db, task, payload)
         if task.action_type in {ActionType.TEST.value, ActionType.RETEST.value}:

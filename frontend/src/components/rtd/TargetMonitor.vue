@@ -171,6 +171,31 @@ async function resetFlow() {
 
           <button
             class="monitor-action-button"
+            :class="monitorActionClass(item.sync?.status)"
+            :title="monitorActionDetail(item.sync)"
+            type="button"
+            @click="runSingleAction('sync', item.target_name)"
+          >
+            <strong>Sync</strong>
+            <span class="monitor-action-meta">
+              <span
+                v-if="monitorActionDisplay(item.sync?.status)"
+                :class="[
+                  'monitor-action-emoji',
+                  monitorActionIconClass(item.sync?.status),
+                ]"
+              >
+                {{ monitorActionDisplay(item.sync?.status) }}
+              </span>
+              <span
+                v-if="showMonitorSpinner(item.sync?.status)"
+                class="monitor-action-spinner"
+              ></span>
+            </span>
+          </button>
+
+          <button
+            class="monitor-action-button"
             :class="monitorActionClass(item.compile.status)"
             :title="monitorActionDetail(item.compile)"
             type="button"

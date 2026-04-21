@@ -195,8 +195,8 @@ function loginUserOptionsFor(hostName) {
       <button class="button button-primary" type="submit">등록</button>
     </form>
 
-    <div class="table-wrap console-grid-table">
-      <div class="panel-head user-filter-bar">
+    <div class="admin-table-stack">
+      <div class="user-filter-bar">
         <label class="compact-filter">
           <span class="compact-filter-label">사업부</span>
           <div class="compact-filter-control">
@@ -213,7 +213,8 @@ function loginUserOptionsFor(hostName) {
         </label>
       </div>
 
-      <table class="data-table">
+      <div class="table-wrap console-grid-table">
+        <table class="data-table">
         <thead>
           <tr>
             <th class="sortable-header" @click="toggleRtdSort('line_name')">
@@ -285,7 +286,9 @@ function loginUserOptionsFor(hostName) {
                 v-model="rtdDraft(item).values.line_name"
                 class="table-edit-input"
               />
-              <span v-else>{{ item.line_name }}</span>
+              <span v-else class="ellipsis-cell" :title="item.line_name">{{
+                item.line_name
+              }}</span>
             </td>
             <td>
               <input
@@ -293,7 +296,9 @@ function loginUserOptionsFor(hostName) {
                 v-model="rtdDraft(item).values.line_id"
                 class="table-edit-input"
               />
-              <span v-else>{{ item.line_id }}</span>
+              <span v-else class="ellipsis-cell" :title="item.line_id">{{
+                item.line_id
+              }}</span>
             </td>
             <td>
               <input
@@ -301,7 +306,9 @@ function loginUserOptionsFor(hostName) {
                 v-model="rtdDraft(item).values.business_unit"
                 class="table-edit-input"
               />
-              <span v-else>{{ item.business_unit }}</span>
+              <span v-else class="ellipsis-cell" :title="item.business_unit">{{
+                item.business_unit
+              }}</span>
             </td>
             <td>
               <input
@@ -324,7 +331,9 @@ function loginUserOptionsFor(hostName) {
                   {{ host }}
                 </option>
               </select>
-              <span v-else>{{ item.host_name }}</span>
+              <span v-else class="ellipsis-cell" :title="item.host_name">{{
+                item.host_name
+              }}</span>
             </td>
             <td>
               <select
@@ -344,7 +353,9 @@ function loginUserOptionsFor(hostName) {
                   {{ user }}
                 </option>
               </select>
-              <span v-else>{{ item.login_user }}</span>
+              <span v-else class="ellipsis-cell" :title="item.login_user">{{
+                item.login_user
+              }}</span>
             </td>
             <td class="modifier-cell">
               <span class="modifier-text ellipsis-cell" :title="item.modifier">{{
@@ -389,6 +400,7 @@ function loginUserOptionsFor(hostName) {
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </template>

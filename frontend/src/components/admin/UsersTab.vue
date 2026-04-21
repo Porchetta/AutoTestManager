@@ -3,10 +3,18 @@ import { computed, reactive, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useAdminStore } from "../../stores/admin";
 import { useUiStore } from "../../stores/ui";
+import { sortItems, useSort } from "./sortHelpers";
 
 const adminStore = useAdminStore();
 const uiStore = useUiStore();
 const { users } = storeToRefs(adminStore);
+
+const {
+  sortKey,
+  sortOrder,
+  toggle: toggleUserSort,
+  stateOf: userSortState,
+} = useSort("user_id");
 
 const selectedUserModule = ref("ALL");
 const userDrafts = reactive({});
@@ -19,34 +27,25 @@ const userModules = computed(() => {
 });
 
 const filteredUsers = computed(() => {
-  if (selectedUserModule.value === "ALL") {
-    return users.value;
-  }
-  return users.value.filter(
-    (user) => user.module_name === selectedUserModule.value,
-  );
+  const filtered =
+    selectedUserModule.value === "ALL"
+      ? [...users.value]
+      : users.value.filter(
+          (user) => user.module_name === selectedUserModule.value,
+        );
+  return sortItems(filtered, sortKey.value, sortOrder.value);
 });
 
 function syncUserDrafts() {
   for (const user of users.value) {
-    if (!userDrafts[user.user_id]) {
-      userDrafts[user.user_id] = {
-        editing: {
-          module_name: false,
-          is_approved: false,
-          is_admin: false,
-        },
-        values: {
-          module_name: user.module_name,
-          is_approved: user.is_approved,
-          is_admin: user.is_admin,
-        },
-      };
-      continue;
-    }
-    userDrafts[user.user_id].values.module_name = user.module_name;
-    userDrafts[user.user_id].values.is_approved = user.is_approved;
-    userDrafts[user.user_id].values.is_admin = user.is_admin;
+    userDrafts[user.user_id] = {
+      editing: userDrafts[user.user_id]?.editing ?? false,
+      values: {
+        module_name: user.module_name,
+        is_approved: user.is_approved,
+        is_admin: user.is_admin,
+      },
+    };
   }
 }
 
@@ -56,8 +55,8 @@ function userDraft(user) {
   return userDrafts[user.user_id];
 }
 
-function toggleUserEdit(userId, field) {
-  userDrafts[userId].editing[field] = !userDrafts[userId].editing[field];
+function isUserEditing(user) {
+  return Boolean(userDraft(user)?.editing);
 }
 
 function userChanged(user) {
@@ -70,6 +69,21 @@ function userChanged(user) {
   );
 }
 
+function toggleUserEdit(user) {
+  userDrafts[user.user_id].editing = !userDrafts[user.user_id].editing;
+}
+
+function cancelUserEdit(user) {
+  userDrafts[user.user_id] = {
+    editing: false,
+    values: {
+      module_name: user.module_name,
+      is_approved: user.is_approved,
+      is_admin: user.is_admin,
+    },
+  };
+}
+
 async function applyUser(user) {
   const draft = userDraft(user);
   await adminStore.updateUser(user.user_id, {
@@ -77,9 +91,7 @@ async function applyUser(user) {
     is_approved: draft.values.is_approved,
     is_admin: draft.values.is_admin,
   });
-  draft.editing.module_name = false;
-  draft.editing.is_approved = false;
-  draft.editing.is_admin = false;
+  draft.editing = false;
   uiStore.setNotice(`${user.user_id} 정보가 반영되었습니다.`);
 }
 
@@ -95,8 +107,8 @@ async function removeUser(userId) {
 </script>
 
 <template>
-  <div class="table-wrap console-grid-table">
-    <div class="panel-head user-filter-bar">
+  <div class="admin-table-stack">
+    <div class="user-filter-bar">
       <label class="compact-filter">
         <span class="compact-filter-label">Module</span>
         <div class="compact-filter-control">
@@ -113,112 +125,135 @@ async function removeUser(userId) {
       </label>
     </div>
 
-    <table class="data-table">
+    <div class="table-wrap console-grid-table">
+      <table class="data-table">
       <thead>
         <tr>
-          <th>User ID</th>
-          <th>Name</th>
-          <th>Module</th>
-          <th>Approved</th>
-          <th>Admin</th>
-          <th>Apply</th>
-          <th>Delete</th>
+          <th class="sortable-header" @click="toggleUserSort('user_id')">
+            <div class="sortable-header-inner">
+              <span>User ID</span>
+              <span class="sort-icon" v-bind="userSortState('user_id')"></span>
+            </div>
+          </th>
+          <th class="sortable-header" @click="toggleUserSort('user_name')">
+            <div class="sortable-header-inner">
+              <span>Name</span>
+              <span class="sort-icon" v-bind="userSortState('user_name')"></span>
+            </div>
+          </th>
+          <th class="sortable-header" @click="toggleUserSort('module_name')">
+            <div class="sortable-header-inner">
+              <span>Module</span>
+              <span
+                class="sort-icon"
+                v-bind="userSortState('module_name')"
+              ></span>
+            </div>
+          </th>
+          <th class="sortable-header" @click="toggleUserSort('is_approved')">
+            <div class="sortable-header-inner">
+              <span>Approved</span>
+              <span
+                class="sort-icon"
+                v-bind="userSortState('is_approved')"
+              ></span>
+            </div>
+          </th>
+          <th class="sortable-header" @click="toggleUserSort('is_admin')">
+            <div class="sortable-header-inner">
+              <span>Admin</span>
+              <span class="sort-icon" v-bind="userSortState('is_admin')"></span>
+            </div>
+          </th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="user in filteredUsers" :key="user.user_id">
-          <td>{{ user.user_id }}</td>
-          <td>{{ user.user_name }}</td>
+        <tr
+          v-for="user in filteredUsers"
+          :key="user.user_id"
+          :class="{ 'editing-row': isUserEditing(user) }"
+        >
           <td>
-            <div class="inline-edit-cell">
-              <template v-if="userDraft(user)?.editing.module_name">
-                <input
-                  v-model="userDraft(user).values.module_name"
-                  class="inline-input"
-                />
-              </template>
-              <template v-else>
-                <span>{{ userDraft(user)?.values.module_name }}</span>
-              </template>
-              <button
-                class="edit-icon-button"
-                type="button"
-                @click="toggleUserEdit(user.user_id, 'module_name')"
-              >
-                Edit
-              </button>
-            </div>
+            <span class="ellipsis-cell" :title="user.user_id">{{
+              user.user_id
+            }}</span>
           </td>
           <td>
-            <div class="inline-edit-cell">
-              <template v-if="userDraft(user)?.editing.is_approved">
-                <select
-                  v-model="userDraft(user).values.is_approved"
-                  class="inline-select"
-                >
-                  <option :value="true">Y</option>
-                  <option :value="false">N</option>
-                </select>
-              </template>
-              <template v-else>
-                <span>{{
-                  userDraft(user)?.values.is_approved ? "Y" : "N"
-                }}</span>
-              </template>
-              <button
-                class="edit-icon-button"
-                type="button"
-                @click="toggleUserEdit(user.user_id, 'is_approved')"
-              >
-                Edit
-              </button>
-            </div>
+            <span class="ellipsis-cell" :title="user.user_name">{{
+              user.user_name
+            }}</span>
           </td>
           <td>
-            <div class="inline-edit-cell">
-              <template v-if="userDraft(user)?.editing.is_admin">
-                <select
-                  v-model="userDraft(user).values.is_admin"
-                  class="inline-select"
-                >
-                  <option :value="true">Y</option>
-                  <option :value="false">N</option>
-                </select>
-              </template>
-              <template v-else>
-                <span>{{ userDraft(user)?.values.is_admin ? "Y" : "N" }}</span>
-              </template>
-              <button
-                class="edit-icon-button"
-                type="button"
-                @click="toggleUserEdit(user.user_id, 'is_admin')"
-              >
-                Edit
-              </button>
-            </div>
+            <input
+              v-if="userDraft(user)?.editing"
+              v-model="userDraft(user).values.module_name"
+              class="table-edit-input"
+            />
+            <span v-else class="ellipsis-cell" :title="user.module_name">{{
+              user.module_name
+            }}</span>
           </td>
           <td>
-            <button
-              class="button button-secondary"
-              :disabled="!userChanged(user)"
-              @click="applyUser(user)"
+            <select
+              v-if="userDraft(user)?.editing"
+              v-model="userDraft(user).values.is_approved"
+              class="table-edit-select"
             >
-              반영
-            </button>
+              <option :value="true">Y</option>
+              <option :value="false">N</option>
+            </select>
+            <span v-else>{{ user.is_approved ? "Y" : "N" }}</span>
           </td>
           <td>
-            <button
-              class="button button-danger"
-              @click="removeUser(user.user_id)"
+            <select
+              v-if="userDraft(user)?.editing"
+              v-model="userDraft(user).values.is_admin"
+              class="table-edit-select"
             >
-              삭제
-            </button>
+              <option :value="true">Y</option>
+              <option :value="false">N</option>
+            </select>
+            <span v-else>{{ user.is_admin ? "Y" : "N" }}</span>
+          </td>
+          <td class="actions-cell">
+            <div class="row-action-group">
+              <button
+                v-if="userDraft(user)?.editing"
+                class="button button-secondary"
+                :disabled="!userChanged(user)"
+                @click="applyUser(user)"
+              >
+                반영
+              </button>
+              <button
+                v-else
+                class="button button-ghost"
+                @click="toggleUserEdit(user)"
+              >
+                수정
+              </button>
+              <button
+                v-if="userDraft(user)?.editing"
+                class="button button-ghost"
+                @click="cancelUserEdit(user)"
+              >
+                취소
+              </button>
+              <button
+                class="button button-danger"
+                @click="removeUser(user.user_id)"
+              >
+                삭제
+              </button>
+            </div>
           </td>
         </tr>
         <tr v-if="!filteredUsers.length">
-          <td colspan="7" class="muted">등록된 사용자가 없습니다.</td>
+          <td colspan="6" class="muted">등록된 사용자가 없습니다.</td>
         </tr>
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>

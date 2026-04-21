@@ -46,7 +46,9 @@
 }
 
 .button-secondary:hover {
-  filter: brightness(0.94);
+  background: color-mix(in srgb, var(--secondary) 80%, #000);
+  border-color: color-mix(in srgb, var(--secondary) 80%, #000);
+  color: #ffffff;
 }
 
 .button-accent {
