@@ -97,6 +97,7 @@ export const useRtdStore = defineStore('rtd', () => {
     target_lines: targetLines.value,
     monitor_rule_selection: monitorRuleSelection.value,
     active_task_ids: tasks.value.map((task) => task.task_id),
+    copy_visibility_map: copyVisibilityMap.value,
     sync_visibility_map: syncVisibilityMap.value,
     compile_visibility_map: compileVisibilityMap.value,
     test_visibility_map: testVisibilityMap.value,
@@ -224,6 +225,7 @@ export const useRtdStore = defineStore('rtd', () => {
     majorChangeItems.value = session.major_change_items || {}
     targetLines.value = session.target_lines || []
     monitorRuleSelection.value = session.monitor_rule_selection || {}
+    copyVisibilityMap.value = session.copy_visibility_map || {}
     syncVisibilityMap.value = session.sync_visibility_map || {}
     compileVisibilityMap.value = session.compile_visibility_map || {}
     testVisibilityMap.value = session.test_visibility_map || {}

@@ -17,6 +17,10 @@ class RtdSessionPayload(BaseModel):
     target_lines: list[str] = Field(default_factory=list)
     monitor_rule_selection: dict[str, str] = Field(default_factory=dict)
     active_task_ids: list[str] = Field(default_factory=list)
+    copy_visibility_map: dict[str, bool] = Field(default_factory=dict)
+    sync_visibility_map: dict[str, bool] = Field(default_factory=dict)
+    compile_visibility_map: dict[str, bool] = Field(default_factory=dict)
+    test_visibility_map: dict[str, bool] = Field(default_factory=dict)
     svn_upload: dict[str, Any] = Field(default_factory=dict)
 
 
