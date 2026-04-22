@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -19,6 +20,7 @@ from app.services.file_download import (
     get_existing_download_path,
 )
 from app.services.file_service import generate_summary_file
+from app.services.rule_favorites import list_favorite_rule_names, set_favorite
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
 from app.services.svn_upload_custom import perform_ezdfs_svn_upload
 from app.services.task_service import (
@@ -47,7 +49,46 @@ def rules(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return success_response({"items": get_ezdfs_rules(db, current_user, module_name)})
+    items = get_ezdfs_rules(db, current_user, module_name)
+    favorites_db = list_favorite_rule_names(
+        db, current_user.user_id, TestType.EZDFS, module_name
+    )
+    available_rule_names = {str(item.get("rule_name") or "") for item in items}
+    favorite_names = sorted(name for name in favorites_db if name in available_rule_names)
+    favorite_set = set(favorite_names)
+    favored = [item for item in items if str(item.get("rule_name") or "") in favorite_set]
+    rest = [item for item in items if str(item.get("rule_name") or "") not in favorite_set]
+    return success_response({"items": favored + rest, "favorite_names": favorite_names})
+
+
+class _EzdfsFavoriteRequest(BaseModel):
+    module_name: str
+    rule_name: str
+    favorite: bool
+
+
+@router.post("/rules/favorite")
+def toggle_rule_favorite(
+    payload: _EzdfsFavoriteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    new_state = set_favorite(
+        db,
+        current_user.user_id,
+        TestType.EZDFS,
+        payload.module_name,
+        payload.rule_name,
+        payload.favorite,
+    )
+    favorites_db = list_favorite_rule_names(
+        db, current_user.user_id, TestType.EZDFS, payload.module_name
+    )
+    return success_response({
+        "rule_name": payload.rule_name,
+        "favorite": new_state,
+        "favorite_names": sorted(favorites_db),
+    })
 
 
 @router.get("/sub-rules")

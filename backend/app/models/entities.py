@@ -159,6 +159,30 @@ class TaskHistoryDaily(Base):
     count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
+class RuleFavorite(TimestampMixin, Base):
+    """사용자별 즐겨찾기 룰.
+
+    scope_key는 RTD면 line_name, ezDFS면 module_name. 서버별로 존재하는
+    룰이 다르므로 (test_type, scope_key) 단위로 관리한다. 보유된 favorite은
+    해당 scope에 룰이 없으면 단순히 노출되지 않을 뿐, DB에서는 보존된다.
+    """
+
+    __tablename__ = "rule_favorites"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "test_type", "scope_key", "rule_name",
+            name="uq_rule_favorite_key",
+        ),
+        Index("ix_rule_favorites_lookup", "user_id", "test_type", "scope_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    test_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    rule_name: Mapped[str] = mapped_column(String(200), nullable=False)
+
+
 class DashboardLike(TimestampMixin, Base):
     __tablename__ = "dashboard_likes"
 

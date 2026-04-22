@@ -263,8 +263,8 @@
 .rule-builder-row,
 .rule-toolbar-row {
   display: grid;
-  grid-template-columns: minmax(0, 220px) minmax(0, 140px) minmax(0, 140px) auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 220px) 34px minmax(0, 140px) minmax(0, 140px) auto;
+  gap: 8px;
   align-items: end;
 }
 
@@ -282,8 +282,12 @@
 
 .rule-builder-field span,
 .rule-builder-action span {
+  display: flex;
+  align-items: center;
+  min-height: 18px;
   color: var(--muted);
   font-size: 0.74rem;
+  line-height: 1.2;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-weight: 600;
@@ -309,13 +313,69 @@
 
 .rule-builder-action {
   display: grid;
+  grid-template-rows: minmax(18px, auto) 40px;
   gap: 5px;
-  align-content: end;
+}
+
+.rule-builder-action-icon {
+  width: 34px;
+  justify-items: center;
+}
+
+.rule-builder-action-icon span {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .rule-builder-action .button {
   min-height: 40px;
   white-space: nowrap;
+}
+
+.rule-builder-action .button.favorite-toggle {
+  width: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  height: 34px;
+  align-self: center;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0.92rem;
+  line-height: 1;
+  color: var(--muted);
+  border-color: color-mix(in srgb, var(--warning) 18%, var(--border));
+  background: color-mix(in srgb, var(--warning) 5%, var(--panel));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition:
+    transform 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.rule-builder-action .button.favorite-toggle:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.04);
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 42%, var(--border));
+  background: color-mix(in srgb, var(--warning) 12%, var(--panel));
+  box-shadow: var(--shadow-sm);
+}
+
+.rule-builder-action .button.favorite-toggle.is-active {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 46%, var(--border));
+  background: color-mix(in srgb, var(--warning) 18%, var(--panel));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 0 0 1px color-mix(in srgb, var(--warning) 16%, transparent);
+}
+
+.rule-builder-action .button.favorite-toggle.is-active:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--warning) 85%, var(--text));
+  border-color: color-mix(in srgb, var(--warning) 60%, var(--border));
+  background: color-mix(in srgb, var(--warning) 24%, var(--panel));
+  box-shadow: var(--shadow-sm);
 }
 
 .stack-list.selection-tray-list {
@@ -663,4 +723,3 @@
   background: var(--accent-strong);
   border-color: color-mix(in srgb, var(--accent-strong) 72%, var(--secondary));
 }
-

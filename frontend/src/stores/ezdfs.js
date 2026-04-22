@@ -22,6 +22,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
   const flowTaskIds = ref([]);
   const modules = ref([]);
   const rules = ref([]);
+  const favoriteRuleNames = ref([]);
   const subRuleError = ref("");
   const svnUpload = ref({});
 
@@ -34,14 +35,27 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
   async function loadRules() {
     if (!selectedModule.value) {
       rules.value = [];
+      favoriteRuleNames.value = [];
       return;
     }
 
-    rules.value = (
-      await apiGet("/api/ezdfs/rules", {
-        params: { module_name: selectedModule.value },
-      })
-    ).items;
+    const data = await apiGet("/api/ezdfs/rules", {
+      params: { module_name: selectedModule.value },
+    });
+    rules.value = data.items || [];
+    favoriteRuleNames.value = data.favorite_names || [];
+  }
+
+  async function toggleRuleFavorite(ruleName) {
+    if (!selectedModule.value || !ruleName) return;
+    const isFavorite = favoriteRuleNames.value.includes(ruleName);
+    const data = await apiPost("/api/ezdfs/rules/favorite", {
+      module_name: selectedModule.value,
+      rule_name: ruleName,
+      favorite: !isFavorite,
+    });
+    favoriteRuleNames.value = data.favorite_names || [];
+    await loadRules();
   }
 
   async function loadSubRules() {
@@ -486,10 +500,12 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     tasks,
     modules,
     rules,
+    favoriteRuleNames,
     subRuleError,
     svnUpload,
     loadInitialData,
     loadRules,
+    toggleRuleFavorite,
     loadSubRules,
     saveSession,
     restoreSession,
