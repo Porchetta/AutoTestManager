@@ -1,0 +1,170 @@
+/* ---------- Responsive ---------- */
+@media (max-width: 1080px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: relative;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    padding: 14px 20px;
+  }
+
+  .brand-card {
+    border-bottom: none;
+    border-right: 1px solid var(--sidebar-border);
+    padding: 0 16px 0 0;
+    margin: 0 4px 0 0;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    flex: 1;
+    overflow-x: auto;
+  }
+
+  .nav-link {
+    white-space: nowrap;
+  }
+
+  .auth-page,
+  .page-grid,
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-span-2,
+  .field-span-2 {
+    grid-column: span 1;
+  }
+
+  .step-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .manager-banner,
+  .dashboard-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-console-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-inline-stats,
+  .mypage-account-stats,
+  .manager-step-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .macro-review-grid,
+  .macro-console-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .operation-process-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .operation-process-rail {
+    gap: 8px;
+  }
+
+  .rule-builder-row,
+  .rule-toolbar-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-form-panel {
+    position: static;
+  }
+
+  .task-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .monitor-board {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .layout-main,
+  .auth-page {
+    padding: 18px;
+  }
+
+  .field-grid,
+  .topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar,
+  .panel-head,
+  .manager-section-head,
+  .wizard-actions,
+  .button-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-tab-button {
+    width: 100%;
+    border-radius: var(--radius);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .admin-tab-panel {
+    border-radius: var(--radius-xl);
+  }
+
+  .manager-inline-stats,
+  .mypage-account-stats,
+  .manager-step-strip,
+  .rule-builder-row,
+  .rule-toolbar-row,
+  .selection-tray-list,
+  .task-grid,
+  .monitor-board,
+  .monitor-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .operation-process-rail {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .operation-process-sequence {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .operation-process-step {
+    width: 100%;
+  }
+
+  .operation-process-step .operation-button {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .operation-process-arrow {
+    display: none;
+  }
+
+  .operation-process-divider {
+    display: none;
+  }
+
+  .operation-process-execute {
+    width: 100%;
+  }
+
+  .operation-button-execute-all {
+    width: 100%;
+  }
+}

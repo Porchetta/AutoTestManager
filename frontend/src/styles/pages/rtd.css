@@ -1,0 +1,666 @@
+/* ---------- RTD Manager ---------- */
+.manager-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.95fr);
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--panel-sunken);
+}
+
+.manager-banner-copy h4 {
+  margin: 4px 0 6px;
+  font-size: 1.1rem;
+}
+
+.manager-banner-copy p {
+  color: var(--muted-strong);
+  font-size: 0.9rem;
+}
+
+.manager-inline-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.manager-inline-stats-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mini-stat {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.mini-stat span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.mini-stat strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.manager-step-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+}
+
+.manager-step-strip-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.manager-step-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted-strong);
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.manager-step-button:hover {
+  color: var(--text);
+  background: var(--panel);
+}
+
+.manager-step-button[data-active='true'] {
+  background: var(--panel);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.rtd-manager-layout {
+  display: block;
+}
+
+.manager-workspace {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.manager-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.manager-section-head h4 {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+}
+
+.manager-section-head-compact {
+  margin-top: 4px;
+}
+
+.manager-section-title-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+
+.manager-inline-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: -2px;
+}
+
+.manager-inline-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.manager-inline-spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+/* ---------- Macro Review ---------- */
+.macro-review-grid,
+.macro-console-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: start;
+}
+
+.macro-console-card {
+  flex: 0 0 auto;
+  width: min(100%, 420px);
+}
+
+.macro-card-head-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.macro-card-head-copy h4 {
+  margin: 0;
+}
+
+.macro-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.macro-card-action {
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.macro-console-card {
+  padding: 14px;
+  gap: 10px;
+}
+
+.macro-stack-list {
+  display: grid;
+  gap: 6px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.stack-item.macro-select-item {
+  padding: 0px 10px;
+  min-height: 0;
+  align-items: center;
+}
+
+.macro-select-label {
+  min-width: 0;
+  word-break: break-word;
+  font-size: 0.88rem;
+}
+
+.macro-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.macro-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.macro-toolbar {
+  margin-top: -2px;
+  margin-bottom: 4px;
+}
+
+.macro-state-panel {
+  min-height: 74px;
+  align-content: center;
+  display: grid;
+  gap: 4px;
+}
+
+/* ---------- Rule Builder ---------- */
+.rule-builder-card {
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--panel-sunken);
+}
+
+.rule-toolbar-card {
+  padding: 12px 14px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.rule-builder-row,
+.rule-toolbar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 140px) minmax(0, 140px) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.rule-toolbar-row-single {
+  grid-template-columns: minmax(0, 240px);
+}
+
+.rule-toolbar-row .rule-builder-field select {
+  min-width: 0;
+}
+
+.rule-builder-field {
+  gap: 5px;
+}
+
+.rule-builder-field span,
+.rule-builder-action span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rule-builder-field select,
+.rule-builder-field input {
+  min-height: 40px;
+}
+
+.field-static-value {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.rule-builder-action {
+  display: grid;
+  gap: 5px;
+  align-content: end;
+}
+
+.rule-builder-action .button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.stack-list.selection-tray-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selection-tray-item {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 8px 12px;
+  gap: 10px;
+}
+
+.selection-tray-item .rule-target-copy {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.selection-tray-item .rule-target-copy strong {
+  font-size: 0.85rem;
+}
+
+.selection-tray-item .rule-target-copy p {
+  margin: 0;
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.selection-tray-item .button {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+}
+
+.rule-target-item {
+  align-items: center;
+}
+
+.rule-target-copy {
+  min-width: 0;
+}
+
+.rule-target-copy p {
+  margin: 3px 0 0;
+  font-size: 0.8rem;
+}
+
+/* ---------- Operation Console ---------- */
+.operation-console {
+  display: flex;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.operation-console-main,
+.operation-console-side {
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--panel-sunken);
+}
+
+.operation-console-main-full {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.svn-upload-inline-panel {
+  min-width: 320px;
+  flex: 0 1 auto;
+}
+
+.svn-upload-inline-row {
+  display: grid;
+  grid-template-columns: max-content max-content auto 1px max-content auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.svn-upload-inline-field,
+.svn-upload-inline-action,
+.svn-upload-inline-result,
+.svn-upload-inline-divider {
+  min-width: 0;
+}
+
+.svn-upload-inline-field {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+  justify-self: start;
+}
+
+.svn-upload-inline-label {
+  flex: 0 0 auto;
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.svn-upload-inline-field input {
+  min-height: 36px;
+  width: 112px;
+  max-width: 112px;
+}
+
+.svn-upload-inline-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.svn-upload-inline-action .button {
+  min-height: 36px;
+  padding-inline: 18px;
+}
+
+.svn-upload-inline-divider {
+  align-self: stretch;
+  width: 1px;
+  background: var(--border);
+  opacity: 0.9;
+}
+
+.svn-upload-inline-result {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.svn-upload-inline-result input[readonly] {
+  background: var(--bg-soft);
+  font-weight: 700;
+}
+
+/* ---------- SVN Result Modal ---------- */
+.svn-result-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  animation: svn-result-fade-in 0.15s ease;
+}
+
+@keyframes svn-result-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.svn-result-dialog {
+  display: grid;
+  gap: 0;
+  width: min(90vw, 680px);
+  max-height: 80vh;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.svn-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.svn-result-header h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.svn-result-header .button {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.svn-result-body {
+  margin: 0;
+  padding: 20px;
+  overflow: auto;
+  max-height: 60vh;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--panel-sunken);
+}
+
+.operation-process-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.operation-process-rail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.operation-process-sequence {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.operation-process-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.operation-process-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.operation-process-arrow {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.operation-process-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 40px;
+  background: rgba(127, 167, 186, 0.1);
+}
+
+.operation-process-execute {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.operation-button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 10px 18px;
+  border-radius: 12px;
+}
+
+.operation-button strong {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* 복사 → 컴파일 → 테스트 → 결과서 생성: 단계별 accent 진행 */
+.operation-button-step-1 {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text-soft);
+}
+.operation-button-step-1:hover {
+  background: var(--bg-soft);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: var(--text);
+}
+
+.operation-button-step-sync {
+  background: color-mix(in srgb, var(--accent) 4%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  color: var(--text-soft);
+}
+.operation-button-step-sync:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  color: var(--text);
+}
+
+.operation-button-step-2 {
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--accent-strong);
+}
+.operation-button-step-2:hover {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+}
+
+.operation-button-step-3 {
+  background: color-mix(in srgb, var(--secondary) 10%, var(--panel));
+  border-color: color-mix(in srgb, var(--secondary) 34%, var(--border));
+  color: var(--secondary);
+}
+.operation-button-step-3:hover {
+  background: color-mix(in srgb, var(--secondary) 18%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--secondary) 50%, var(--border));
+}
+
+.operation-button-step-4 {
+  background: color-mix(in srgb, var(--secondary) 8%, color-mix(in srgb, var(--accent) 10%, var(--panel)));
+  border-color: color-mix(in srgb, var(--secondary) 44%, var(--border));
+  color: var(--text);
+}
+.operation-button-step-4:hover {
+  background: color-mix(in srgb, var(--secondary) 14%, color-mix(in srgb, var(--accent) 14%, var(--bg-soft)));
+  border-color: color-mix(in srgb, var(--secondary) 58%, var(--border));
+}
+
+.operation-button-execute-all {
+  min-width: 0;
+  padding: 10px 14px;
+  justify-content: center;
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--secondary));
+  color: var(--on-accent);
+}
+
+.operation-button-execute-all:hover {
+  background: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent-strong) 72%, var(--secondary));
+}
+

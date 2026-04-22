@@ -27,24 +27,43 @@ class UserUpdateRequest(BaseModel):
     is_approved: bool
 
 
+class HostCredentialCreate(BaseModel):
+    login_user: str
+    login_password: str
+
+
+class HostCredentialUpdate(BaseModel):
+    login_user: str
+    login_password: str
+
+
+class HostCredentialResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    login_user: str
+    login_password: str
+    modifier: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class HostConfigCreate(BaseModel):
     name: str
     ip: str
-    login_user: str
-    login_password: str
 
 
 class HostConfigUpdate(BaseModel):
     name: str
     ip: str
-    login_user: str
-    login_password: str
 
 
-class HostConfigResponse(HostConfigCreate):
+class HostConfigResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    name: str
+    ip: str
     modifier: str
+    credentials: list[HostCredentialResponse] = []
     created_at: datetime
     updated_at: datetime
 
@@ -61,6 +80,7 @@ class RtdConfigCreate(BaseModel):
     business_unit: str
     home_dir_path: str
     host_name: str
+    login_user: str
 
 
 class RtdConfigUpdate(BaseModel):
@@ -69,6 +89,7 @@ class RtdConfigUpdate(BaseModel):
     business_unit: str
     home_dir_path: str
     host_name: str
+    login_user: str
 
 
 class RtdConfigResponse(RtdConfigCreate):
@@ -84,6 +105,7 @@ class EzdfsConfigCreate(BaseModel):
     port: int
     home_dir_path: str
     host_name: str
+    login_user: str
 
 
 class EzdfsConfigUpdate(BaseModel):
@@ -91,6 +113,7 @@ class EzdfsConfigUpdate(BaseModel):
     port: int
     home_dir_path: str
     host_name: str
+    login_user: str
 
 
 class EzdfsConfigResponse(EzdfsConfigCreate):

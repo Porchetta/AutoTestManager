@@ -13,21 +13,21 @@ from app.services.catalog_service import (
     get_ezdfs_rules,
     get_ezdfs_sub_rules,
 )
-from app.services.file_service import (
+from app.services.file_download import (
     generate_aggregate_ezdfs_summary_file,
-    generate_summary_file,
     get_ezdfs_raw_content_path,
     get_existing_download_path,
 )
+from app.services.file_service import generate_summary_file
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
 from app.services.svn_upload_custom import perform_ezdfs_svn_upload
 from app.services.task_service import (
     create_test_task,
     ensure_task_owner,
     list_tasks_by_type,
-    queue_mock_task,
     serialize_task,
 )
+from app.services.task_worker import queue_task
 from app.utils.enums import ActionType, TaskStep, TestType
 
 router = APIRouter(prefix="/api/ezdfs", tags=["ezdfs"])
@@ -61,7 +61,7 @@ def sub_rules(
     try:
         items = get_ezdfs_sub_rules(db, current_user, module_name, rule_name, file_name=file_name)
         return success_response({"items": items, "error": ""})
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, OSError, RuntimeError) as exc:
         return success_response({"items": ["error"], "error": str(exc)})
 
 
@@ -126,7 +126,7 @@ def _create_ezdfs_task(
         requested_payload=payload.model_dump(),
         current_step=TaskStep.TESTING,
     )
-    queue_mock_task(background_tasks, task.task_id, TaskStep.TESTING)
+    queue_task(background_tasks, task.task_id, TaskStep.TESTING, TestType.EZDFS)
     return success_response({"task": serialize_task(task)})
 
 

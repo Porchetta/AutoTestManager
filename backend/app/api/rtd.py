@@ -26,12 +26,12 @@ from app.services.catalog_service import (
     get_rules_by_line_name,
     get_target_lines_by_business_unit,
 )
-from app.services.file_service import (
+from app.services.file_download import (
     generate_aggregate_rtd_summary_file,
-    generate_summary_file,
     get_existing_download_path,
     get_rtd_raw_rule_file_map,
 )
+from app.services.file_service import generate_summary_file
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
 from app.services.svn_upload_custom import perform_rtd_svn_upload
 from app.services.task_service import (
@@ -39,26 +39,18 @@ from app.services.task_service import (
     ensure_task_owner,
     list_rtd_target_monitor_items,
     list_tasks_by_type,
-    queue_mock_task,
     serialize_task,
 )
+from app.services.task_worker import queue_task
 from app.utils.enums import ActionType, TaskStep, TestType
+from app.utils.naming import normalize_target_line_name, sanitize_path_token
 
 router = APIRouter(prefix="/api/rtd", tags=["rtd"])
 
 
-def _normalize_target_line_name(line_name: str) -> str:
-    return str(line_name or "").replace("_TARGET", "")
-
-
-def _sanitize_download_token(value: str) -> str:
-    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "").strip())
-    return sanitized.strip("._-") or "report"
-
-
 def _build_rtd_raw_txt_name(task, rule_name: str) -> str:
-    line_name = _sanitize_download_token(_normalize_target_line_name(task.target_name))
-    return f"{line_name}-{_sanitize_download_token(rule_name)}.txt"
+    line_name = sanitize_path_token(normalize_target_line_name(task.target_name))
+    return f"{line_name}-{sanitize_path_token(rule_name)}.txt"
 
 
 def _build_rtd_task_requests(
@@ -68,7 +60,7 @@ def _build_rtd_task_requests(
     request_payload = payload.model_dump()
     sorted_target_lines = sorted(
         payload.target_lines,
-        key=lambda item: _normalize_target_line_name(str(item or "")).lower(),
+        key=lambda item: normalize_target_line_name(str(item or "")).lower(),
     )
     return [(target_line, request_payload) for target_line in sorted_target_lines]
 
@@ -108,17 +100,16 @@ def compare_macros(
     try:
         result = compare_macros_by_rule_targets(db, current_user, payload.line_name, payload.selected_rule_targets)
         result["searched"] = True
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, OSError, RuntimeError) as exc:
         result = {
             "searched": True,
-            "old_macros": ["error"],
-            "new_macros": ["error"],
-            "has_diff": False,
+            "per_rule": [],
+            "has_any": False,
             "error": str(exc),
         }
 
     session_payload = get_runtime_session_payload(db, current_user.user_id, TestType.RTD)
-    session_payload["macro_review"] = result
+    session_payload["selected_macros"] = result
     upsert_runtime_session(db, current_user.user_id, TestType.RTD, session_payload)
     return success_response(result)
 
@@ -164,8 +155,65 @@ def save_session(
     if cached_catalog and cached_catalog.get("line_name") == session_payload.get("selected_line_name"):
         session_payload["catalog_cache"] = cached_catalog
 
+    _enrich_selected_rule_targets_with_file_names(session_payload)
+
     session = upsert_runtime_session(db, current_user.user_id, TestType.RTD, session_payload)
     return success_response({"session": session})
+
+
+def _enrich_selected_rule_targets_with_file_names(session_payload: dict) -> None:
+    """
+    Attach `old_file_name` / `new_file_name` to each selected rule target by
+    matching against the cached RTD catalog. Execution layer reads filenames
+    from payload only, so this must be written at rule-select time.
+    """
+    catalog_files = (
+        session_payload.get("catalog_cache", {}).get("files", [])
+        if isinstance(session_payload.get("catalog_cache"), dict)
+        else []
+    )
+    if not isinstance(catalog_files, list):
+        return
+
+    selected = session_payload.get("selected_rule_targets")
+    if not isinstance(selected, list):
+        return
+
+    def lookup(rule_name: str, version: str) -> str:
+        if not rule_name or not version:
+            return ""
+        for entry in catalog_files:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("rule_name") == rule_name and entry.get("version") == version:
+                return str(entry.get("file_name") or "")
+        return ""
+
+    for item in selected:
+        if not isinstance(item, dict):
+            continue
+        rule_name = str(item.get("rule_name") or "").strip()
+        old_version = str(item.get("old_version") or "").strip()
+        new_version = str(item.get("new_version") or "").strip()
+        item["old_file_name"] = lookup(rule_name, old_version)
+        item["new_file_name"] = lookup(rule_name, new_version)
+
+
+def _attach_catalog_cache_to_action_payload(db: Session, current_user: User, action_payload: dict) -> None:
+    """
+    Copy `catalog_cache` from the stored runtime session into an action
+    payload when the client-side payload does not carry it. Enrichment of
+    `selected_rule_targets[*].{old,new}_file_name` relies on this cache.
+    """
+    if not isinstance(action_payload, dict):
+        return
+    cache = action_payload.get("catalog_cache")
+    if isinstance(cache, dict) and cache.get("files"):
+        return
+    stored = get_runtime_session_payload(db, current_user.user_id, TestType.RTD)
+    stored_cache = stored.get("catalog_cache") if isinstance(stored, dict) else None
+    if isinstance(stored_cache, dict) and stored_cache.get("files"):
+        action_payload["catalog_cache"] = stored_cache
 
 
 @router.delete("/session")
@@ -200,13 +248,16 @@ def _create_rtd_tasks(
     if action_type in {ActionType.TEST, ActionType.RETEST} and not payload.payload.get("selected_rule_targets"):
         raise HTTPException(status_code=422, detail="selected_rule_targets is required")
 
+    _attach_catalog_cache_to_action_payload(db, current_user, payload.payload)
+    _enrich_selected_rule_targets_with_file_names(payload.payload)
+
     target_lines = payload.target_lines
     if action_type == ActionType.COPY:
         selected_line_name = str(payload.payload.get("selected_line_name", "")).strip()
         target_lines = [
             target_line
             for target_line in payload.target_lines
-            if _normalize_target_line_name(target_line) != selected_line_name
+            if normalize_target_line_name(target_line) != selected_line_name
         ]
 
     if not target_lines:
@@ -230,7 +281,7 @@ def _create_rtd_tasks(
             requested_payload=requested_payload,
             current_step=step,
         )
-        queue_mock_task(background_tasks, task.task_id, step)
+        queue_task(background_tasks, task.task_id, step, TestType.RTD)
         items.append(serialize_task(task))
 
     return success_response({"items": items})
@@ -244,6 +295,16 @@ def copy_action(
     db: Session = Depends(get_db),
 ):
     return _create_rtd_tasks(background_tasks, db, current_user, payload, ActionType.COPY, TaskStep.COPYING)
+
+
+@router.post("/actions/sync")
+def sync_action(
+    payload: RtdActionRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _create_rtd_tasks(background_tasks, db, current_user, payload, ActionType.SYNC, TaskStep.SYNCING)
 
 
 @router.post("/actions/compile")
@@ -345,7 +406,7 @@ def download_raw(
         for rule_name, content in sections.items():
             archive.writestr(_build_rtd_raw_txt_name(task, rule_name), content)
     zip_buffer.seek(0)
-    zip_name = f"{_sanitize_download_token(_normalize_target_line_name(task.target_name))}-raw.zip"
+    zip_name = f"{sanitize_path_token(normalize_target_line_name(task.target_name))}-raw.zip"
     return Response(
         content=zip_buffer.getvalue(),
         media_type="application/zip",

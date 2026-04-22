@@ -2,27 +2,41 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { apiDelete, apiGet, apiPost, apiPut, downloadFile } from '../api'
+import { waitForTaskTerminalStatus } from '../composables/useTaskPolling'
+
+const EMPTY_MACRO_STATE = () => ({
+  searched: false,
+  per_rule: [],
+  has_any: false,
+  error: '',
+})
+
+function computeRuleDiff(entry) {
+  const oldList = Array.isArray(entry?.old_macros) ? entry.old_macros : []
+  const newList = Array.isArray(entry?.new_macros) ? entry.new_macros : []
+  const oldSet = new Set(oldList)
+  const newSet = new Set(newList)
+  return {
+    old_diff: oldList.filter((item) => !newSet.has(item)),
+    new_diff: newList.filter((item) => !oldSet.has(item)),
+  }
+}
 
 export const useRtdStore = defineStore('rtd', () => {
   const currentStep = ref(1)
   const selectedBusinessUnit = ref('')
   const selectedLineName = ref('')
   const selectedRuleTargets = ref([])
-  const selectedMacros = ref([])
+  const selectedMacros = ref(EMPTY_MACRO_STATE())
   const majorChangeItems = ref({})
-  const macroReview = ref({
-    searched: false,
-    old_macros: [],
-    new_macros: [],
-    rule_macro_map: {},
-    has_diff: false,
-    error: '',
-  })
   const targetLines = ref([])
   const monitorRuleSelection = ref({})
   const tasks = ref([])
   const monitorItems = ref([])
   const copyVisibilityMap = ref({})
+  const syncVisibilityMap = ref({})
+  const compileVisibilityMap = ref({})
+  const testVisibilityMap = ref({})
   const svnUpload = ref({})
 
   const businessUnits = ref([])
@@ -33,6 +47,39 @@ export const useRtdStore = defineStore('rtd', () => {
   const selectedRules = computed(() =>
     [...new Set(selectedRuleTargets.value.map((item) => item.rule_name).filter(Boolean))]
   )
+
+  const macroReview = computed(() => {
+    const perRule = Array.isArray(selectedMacros.value?.per_rule)
+      ? selectedMacros.value.per_rule
+      : []
+    const oldDiffSet = new Set()
+    const newDiffSet = new Set()
+    const oldDiffList = []
+    const newDiffList = []
+    for (const entry of perRule) {
+      const { old_diff, new_diff } = computeRuleDiff(entry)
+      for (const item of old_diff) {
+        if (!oldDiffSet.has(item)) {
+          oldDiffSet.add(item)
+          oldDiffList.push(item)
+        }
+      }
+      for (const item of new_diff) {
+        if (!newDiffSet.has(item)) {
+          newDiffSet.add(item)
+          newDiffList.push(item)
+        }
+      }
+    }
+    return {
+      searched: Boolean(selectedMacros.value?.searched),
+      error: String(selectedMacros.value?.error || ''),
+      per_rule: perRule,
+      old_macros: oldDiffList,
+      new_macros: newDiffList,
+      has_diff: oldDiffList.length > 0 || newDiffList.length > 0,
+    }
+  })
 
   function normalizeTargetLineName(lineName) {
     return String(lineName || '').replace(/_TARGET\b/gi, '')
@@ -47,10 +94,12 @@ export const useRtdStore = defineStore('rtd', () => {
     selected_macros: selectedMacros.value,
     selected_versions: {},
     major_change_items: majorChangeItems.value,
-    macro_review: macroReview.value,
     target_lines: targetLines.value,
     monitor_rule_selection: monitorRuleSelection.value,
     active_task_ids: tasks.value.map((task) => task.task_id),
+    sync_visibility_map: syncVisibilityMap.value,
+    compile_visibility_map: compileVisibilityMap.value,
+    test_visibility_map: testVisibilityMap.value,
     svn_upload: svnUpload.value,
   }))
 
@@ -107,15 +156,7 @@ export const useRtdStore = defineStore('rtd', () => {
 
   async function loadMacroReview() {
     if (!selectedLineName.value || !selectedRuleTargets.value.length) {
-      selectedMacros.value = []
-      macroReview.value = {
-        searched: false,
-        old_macros: [],
-        new_macros: [],
-        rule_macro_map: {},
-        has_diff: false,
-        error: '',
-      }
+      selectedMacros.value = EMPTY_MACRO_STATE()
       return false
     }
 
@@ -125,36 +166,32 @@ export const useRtdStore = defineStore('rtd', () => {
         selected_rule_targets: selectedRuleTargets.value,
       })
 
-      const allMacros = [...new Set([...(result.old_macros || []), ...(result.new_macros || [])])]
-      selectedMacros.value = allMacros
-
-      macroReview.value = {
+      selectedMacros.value = {
         searched: true,
-        old_macros: result.old_macros || [],
-        new_macros: result.new_macros || [],
-        rule_macro_map: result.rule_macro_map || {},
-        has_diff: Boolean(result.has_diff),
+        per_rule: Array.isArray(result.per_rule) ? result.per_rule : [],
+        has_any: Boolean(result.has_any),
         error: result.error || '',
       }
       return true
     } catch (error) {
-      selectedMacros.value = []
       const detail =
         error?.response?.data?.error?.message ||
         error?.response?.data?.detail ||
         error?.message ||
         'Macro 조회에 실패했습니다.'
 
-      macroReview.value = {
+      selectedMacros.value = {
         searched: true,
-        old_macros: [],
-        new_macros: [],
-        rule_macro_map: {},
-        has_diff: false,
+        per_rule: [],
+        has_any: false,
         error: typeof detail === 'string' ? detail : 'Macro 조회에 실패했습니다.',
       }
       return false
     }
+  }
+
+  function resetMacroState() {
+    selectedMacros.value = EMPTY_MACRO_STATE()
   }
 
   async function saveSession() {
@@ -173,18 +210,23 @@ export const useRtdStore = defineStore('rtd', () => {
         new_version: '',
         old_version: '',
       }))
-    selectedMacros.value = Array.isArray(session.selected_macros) ? session.selected_macros : []
-    majorChangeItems.value = session.major_change_items || {}
-    macroReview.value = {
-      searched: Boolean(session.macro_review?.searched),
-      old_macros: session.macro_review?.old_macros || [],
-      new_macros: session.macro_review?.new_macros || [],
-      rule_macro_map: session.macro_review?.rule_macro_map || {},
-      has_diff: Boolean(session.macro_review?.has_diff),
-      error: session.macro_review?.error || '',
+    const storedMacros = session.selected_macros
+    if (storedMacros && typeof storedMacros === 'object' && !Array.isArray(storedMacros)) {
+      selectedMacros.value = {
+        searched: Boolean(storedMacros.searched),
+        per_rule: Array.isArray(storedMacros.per_rule) ? storedMacros.per_rule : [],
+        has_any: Boolean(storedMacros.has_any),
+        error: String(storedMacros.error || ''),
+      }
+    } else {
+      selectedMacros.value = EMPTY_MACRO_STATE()
     }
+    majorChangeItems.value = session.major_change_items || {}
     targetLines.value = session.target_lines || []
     monitorRuleSelection.value = session.monitor_rule_selection || {}
+    syncVisibilityMap.value = session.sync_visibility_map || {}
+    compileVisibilityMap.value = session.compile_visibility_map || {}
+    testVisibilityMap.value = session.test_visibility_map || {}
     svnUpload.value = session.svn_upload || {}
     syncMonitorRuleSelection()
 
@@ -197,11 +239,14 @@ export const useRtdStore = defineStore('rtd', () => {
   function resetAfterBusinessUnit() {
     selectedLineName.value = ''
     selectedRuleTargets.value = []
-    selectedMacros.value = []
+    resetMacroState()
     majorChangeItems.value = {}
-    macroReview.value = { searched: false, old_macros: [], new_macros: [], rule_macro_map: {}, has_diff: false, error: '' }
     targetLines.value = []
     monitorRuleSelection.value = {}
+    copyVisibilityMap.value = {}
+    syncVisibilityMap.value = {}
+    compileVisibilityMap.value = {}
+    testVisibilityMap.value = {}
     svnUpload.value = {}
     lines.value = []
     rules.value = []
@@ -211,11 +256,14 @@ export const useRtdStore = defineStore('rtd', () => {
 
   function resetAfterLine() {
     selectedRuleTargets.value = []
-    selectedMacros.value = []
+    resetMacroState()
     majorChangeItems.value = {}
-    macroReview.value = { searched: false, old_macros: [], new_macros: [], rule_macro_map: {}, has_diff: false, error: '' }
     targetLines.value = []
     monitorRuleSelection.value = {}
+    copyVisibilityMap.value = {}
+    syncVisibilityMap.value = {}
+    compileVisibilityMap.value = {}
+    testVisibilityMap.value = {}
     svnUpload.value = {}
     rules.value = []
     ruleVersions.value = []
@@ -248,17 +296,25 @@ export const useRtdStore = defineStore('rtd', () => {
         ...sessionPayload.value,
         selected_rules: [],
         selected_rule_targets: [],
-        selected_macros: [],
+        selected_macros: EMPTY_MACRO_STATE(),
       }
     }
-    const allowedMacros = new Set(macroReview.value.rule_macro_map?.[normalizedRule]?.all_macros || [])
-    const filteredMacros = selectedMacros.value.filter((item) => allowedMacros.has(item))
+    const filteredPerRule = (selectedMacros.value?.per_rule || []).filter(
+      (entry) => entry?.rule_name === normalizedRule,
+    )
 
     return {
       ...sessionPayload.value,
       selected_rules: filteredRuleTargets.map((item) => item.rule_name),
       selected_rule_targets: filteredRuleTargets,
-      selected_macros: filteredMacros,
+      selected_macros: {
+        searched: Boolean(selectedMacros.value?.searched),
+        per_rule: filteredPerRule,
+        has_any: filteredPerRule.some(
+          (entry) => (entry?.old_macros?.length || 0) + (entry?.new_macros?.length || 0) > 0,
+        ),
+        error: String(selectedMacros.value?.error || ''),
+      },
     }
   }
 
@@ -283,6 +339,21 @@ export const useRtdStore = defineStore('rtd', () => {
         copyVisibilityMap.value[line] = true
       }
     }
+    if (action === 'sync') {
+      for (const line of lines) {
+        syncVisibilityMap.value[line] = true
+      }
+    }
+    if (action === 'compile') {
+      for (const line of lines) {
+        compileVisibilityMap.value[line] = true
+      }
+    }
+    if (action === 'test' || action === 'retest') {
+      for (const line of lines) {
+        testVisibilityMap.value[line] = true
+      }
+    }
     await saveSession()
     return data.items
   }
@@ -297,6 +368,8 @@ export const useRtdStore = defineStore('rtd', () => {
       return
     }
 
+    const idleAction = { status: 'IDLE', status_text: '이력 없음', message: '-' }
+
     monitorItems.value = (
       await apiGet('/api/rtd/monitor', {
         params: {
@@ -304,27 +377,37 @@ export const useRtdStore = defineStore('rtd', () => {
         },
       })
     ).items.map((item) => {
-      const copyStateVisible = copyVisibilityMap.value[item.target_name]
-      const copyStatus = item.copy?.status
+      const result = { ...item }
 
+      const copyStatus = item.copy?.status
       if (copyStatus === 'RUNNING' || copyStatus === 'PENDING') {
         copyVisibilityMap.value[item.target_name] = true
-        return item
+      } else if (!((copyStatus === 'DONE' || copyStatus === 'FAIL') && copyVisibilityMap.value[item.target_name])) {
+        result.copy = { ...(item.copy || {}), ...idleAction }
       }
 
-      if ((copyStatus === 'DONE' || copyStatus === 'FAIL') && copyStateVisible) {
-        return item
+      const syncStatus = item.sync?.status
+      if (syncStatus === 'RUNNING' || syncStatus === 'PENDING') {
+        syncVisibilityMap.value[item.target_name] = true
+      } else if (!((syncStatus === 'DONE' || syncStatus === 'FAIL') && syncVisibilityMap.value[item.target_name])) {
+        result.sync = { ...(item.sync || {}), ...idleAction }
       }
 
-      return {
-        ...item,
-        copy: {
-          ...(item.copy || {}),
-          status: 'IDLE',
-          status_text: '이력 없음',
-          message: '-',
-        },
+      const compileStatus = item.compile?.status
+      if (compileStatus === 'RUNNING' || compileStatus === 'PENDING') {
+        compileVisibilityMap.value[item.target_name] = true
+      } else if (!((compileStatus === 'DONE' || compileStatus === 'FAIL') && compileVisibilityMap.value[item.target_name])) {
+        result.compile = { ...(item.compile || {}), ...idleAction }
       }
+
+      const testStatus = item.test?.status
+      if (testStatus === 'RUNNING' || testStatus === 'PENDING') {
+        testVisibilityMap.value[item.target_name] = true
+      } else if (!((testStatus === 'DONE' || testStatus === 'FAIL') && testVisibilityMap.value[item.target_name])) {
+        result.test = { ...(item.test || {}), ...idleAction }
+      }
+
+      return result
     })
   }
 
@@ -355,32 +438,16 @@ export const useRtdStore = defineStore('rtd', () => {
     })
   }
 
-  function isTerminalTaskStatus(status) {
-    return ['DONE', 'FAIL', 'CANCELED'].includes(String(status || '').toUpperCase())
-  }
-
   async function waitForTaskIds(taskIds, options = {}) {
-    const timeoutMs = options.timeoutMs ?? 15 * 60 * 1000
-    const intervalMs = options.intervalMs ?? 1500
-    const startedAt = Date.now()
-
-    if (!taskIds.length) {
-      return []
-    }
-
-    while (Date.now() - startedAt < timeoutMs) {
-      await refreshTasks()
-      await refreshMonitor()
-
-      const matchedTasks = tasks.value.filter((task) => taskIds.includes(task.task_id))
-      if (matchedTasks.length === taskIds.length && matchedTasks.every((task) => isTerminalTaskStatus(task.status))) {
-        return matchedTasks
-      }
-
-      await new Promise((resolve) => window.setTimeout(resolve, intervalMs))
-    }
-
-    throw new Error('작업 완료 대기 시간이 초과되었습니다.')
+    return waitForTaskTerminalStatus(
+      async () => {
+        await refreshTasks()
+        await refreshMonitor()
+      },
+      (ids) => tasks.value.filter((task) => ids.includes(task.task_id)),
+      taskIds,
+      options,
+    )
   }
 
   async function resetFlow() {
@@ -394,20 +461,15 @@ export const useRtdStore = defineStore('rtd', () => {
     selectedBusinessUnit.value = ''
     selectedLineName.value = ''
     selectedRuleTargets.value = []
-    selectedMacros.value = []
+    resetMacroState()
     majorChangeItems.value = {}
-    macroReview.value = {
-      searched: false,
-      old_macros: [],
-      new_macros: [],
-      rule_macro_map: {},
-      has_diff: false,
-      error: '',
-    }
     targetLines.value = []
     monitorRuleSelection.value = {}
     monitorItems.value = []
     copyVisibilityMap.value = {}
+    syncVisibilityMap.value = {}
+    compileVisibilityMap.value = {}
+    testVisibilityMap.value = {}
     lines.value = []
     rules.value = []
     ruleVersions.value = []
@@ -459,6 +521,7 @@ export const useRtdStore = defineStore('rtd', () => {
     loadRules,
     loadRuleVersions,
     loadMacroReview,
+    resetMacroState,
     saveSession,
     restoreSession,
     resetAfterBusinessUnit,

@@ -4,7 +4,7 @@ from __future__ import annotations
 ezDFS report custom flow
 
 1. file_service가 완료된 ezDFS test task 하나 또는 여러 개를 넘긴다.
-2. build_ezdfs_test_report_file()
+2. build_ezdfs_test_report()
    task 목록을 받아 Excel 결과서를 생성한다.
 3. _build_ezdfs_report_row()
    각 task를 결과서 row 한 줄로 변환한다.
@@ -21,7 +21,7 @@ from openpyxl.styles import Alignment, Font
 from app.models.entities import TestTask
 
 
-def build_ezdfs_test_report_file(
+def build_ezdfs_test_report(
     tasks: TestTask | list[TestTask],
     output_path: Path,
     selected_rule_names: list[str] | None = None,
@@ -225,7 +225,7 @@ def _resolve_ezdfs_rule_name(task: TestTask) -> str:
     """Resolve the logical ezDFS rule name from the stored task payload."""
     try:
         requested_payload = json.loads(task.requested_payload_json or "{}")
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return str(task.target_name or "").strip()
     payload = (
         requested_payload.get("payload")
@@ -249,7 +249,7 @@ def _collect_major_change_items(
     for task in tasks:
         try:
             requested_payload = json.loads(task.requested_payload_json or "{}")
-        except Exception:  # noqa: BLE001
+        except (json.JSONDecodeError, ValueError):
             continue
         payload = (
             requested_payload.get("payload")

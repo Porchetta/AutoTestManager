@@ -29,14 +29,14 @@ from app.services.ezdfs_catalog_custom import (
     read_rule_source_bytes as read_ezdfs_rule_source_bytes,
 )
 from app.services.rtd_catalog_custom import (
-    _build_clean_bash_command as build_rtd_clean_bash_command,
     read_rule_source_bytes as read_rtd_rule_source_bytes,
 )
+from app.utils.ssh_helpers import build_clean_bash_command
 from app.services.session_service import (
     get_runtime_session_payload,
     upsert_runtime_session,
 )
-from app.services.ssh_runtime import open_limited_ssh_client
+from app.services.ssh_runtime import open_direct_ssh_client, open_limited_ssh_client
 from app.utils.enums import TestType
 
 settings = get_settings()
@@ -83,11 +83,11 @@ def perform_rtd_svn_upload(
         if isinstance(session_payload.get("selected_rule_targets"), list)
         else []
     )
-    selected_macros = (
-        session_payload.get("selected_macros")
-        if isinstance(session_payload.get("selected_macros"), list)
-        else []
-    )
+    selected_macros_raw = session_payload.get("selected_macros")
+    if isinstance(selected_macros_raw, dict):
+        macro_per_rule = selected_macros_raw.get("per_rule") or []
+    else:
+        macro_per_rule = []
     if not line_name:
         raise ValueError("selected_line_name is required for SVN Upload")
     if not selected_rule_targets:
@@ -124,18 +124,15 @@ def perform_rtd_svn_upload(
 
         file_contents[file_name] = read_rtd_rule_source_bytes(
             host,
+            config.login_user,
             config.home_dir_path,
             file_name,
         )
 
-    macro_review = session_payload.get("macro_review") or {}
-    new_macros = set(macro_review.get("new_macros") or [])
-
-    for macro_file_name in _collect_selected_macro_file_names(selected_macros):
-        if macro_file_name not in new_macros:
-            continue
+    for macro_file_name in _collect_new_macro_file_names_from_per_rule(macro_per_rule):
         file_contents[macro_file_name] = _read_rtd_macro_source_bytes(
             host,
+            config.login_user,
             config.home_dir_path,
             macro_file_name,
         )
@@ -214,6 +211,7 @@ def perform_ezdfs_svn_upload(
         cleaned_file_name = re.sub(r"-ver\..+\.rul$", ".rul", file_name, flags=re.IGNORECASE)
         file_contents[cleaned_file_name] = read_ezdfs_rule_source_bytes(
             host,
+            config.login_user,
             config.home_dir_path,
             file_name,
         )
@@ -231,6 +229,7 @@ def perform_ezdfs_svn_upload(
         cleaned_file_name = re.sub(r"-ver\..+\.rul$", ".rul", sub_rule_file_name, flags=re.IGNORECASE)
         file_contents[cleaned_file_name] = read_ezdfs_rule_source_bytes(
             host,
+            config.login_user,
             config.home_dir_path,
             sub_rule_file_name,
         )
@@ -339,7 +338,7 @@ def _upload_remote_files(
 ) -> None:
     """Copy each prepared rule file to the remote work directory over SFTP."""
 
-    with open_limited_ssh_client(host) as client:
+    with open_direct_ssh_client(host.name, host.ip, host.login_user, host.login_password) as client:
         sftp = client.open_sftp()
         try:
             for file_name in uploaded_file_names:
@@ -366,7 +365,7 @@ def _run_remote_svn_checkin(
         "bash --noprofile --norc -lc "
         + shlex.quote(f"cd {quoted_dir} && {shlex.quote(command_path)}")
     )
-    with open_limited_ssh_client(host) as client:
+    with open_direct_ssh_client(host.name, host.ip, host.login_user, host.login_password) as client:
         stdin, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
         stdin.write(command_input)
         stdin.flush()
@@ -390,8 +389,8 @@ def _run_remote_shell_command(
 ) -> str:
     """Run a simple non-interactive shell command on the remote SVN host."""
 
-    remote_command = "bash --noprofile --norc -lc " + shlex.quote(command)
-    with open_limited_ssh_client(host) as client:
+    remote_command = build_clean_bash_command(command)
+    with open_direct_ssh_client(host.name, host.ip, host.login_user, host.login_password) as client:
         _, stdout, stderr = client.exec_command(remote_command, timeout=timeout)
         exit_status = stdout.channel.recv_exit_status()
         output = "\n".join(
@@ -435,17 +434,24 @@ def _extract_svn_no(output: str) -> str:
     return str(match.group(1)) if match else ""
 
 
-def _collect_selected_macro_file_names(selected_macros: list[object]) -> list[str]:
-    """Return selected RTD macro/report file names in stable first-seen order."""
+def _collect_new_macro_file_names_from_per_rule(per_rule: list[object]) -> list[str]:
+    """
+    Collect macro file names that are new in the new version (per-rule diff:
+    `new_macros` − `old_macros`), union across rules, first-seen order.
+    """
 
     seen: set[str] = set()
     result: list[str] = []
-    for item in selected_macros:
-        normalized = str(item or "").strip()
-        if not normalized or normalized == "error" or normalized in seen:
+    for entry in per_rule:
+        if not isinstance(entry, dict):
             continue
-        seen.add(normalized)
-        result.append(normalized)
+        old_macros = {str(item or "").strip() for item in (entry.get("old_macros") or []) if str(item or "").strip()}
+        for item in entry.get("new_macros") or []:
+            normalized = str(item or "").strip()
+            if not normalized or normalized == "error" or normalized in seen or normalized in old_macros:
+                continue
+            seen.add(normalized)
+            result.append(normalized)
     return result
 
 
@@ -463,20 +469,22 @@ def _collect_selected_sub_rule_names(selected_sub_rules: list[object]) -> list[s
     return result
 
 
-def _read_rtd_macro_source_bytes(host: HostConfig, home_dir_path: str, file_name: str) -> bytes:
+def _read_rtd_macro_source_bytes(
+    host: HostConfig, login_user: str, home_dir_path: str, file_name: str
+) -> bytes:
     """Read one RTD macro/report file from the sibling Macro directory via SFTP."""
     macro_dir = _macro_dir_from_home(home_dir_path)
     remote_path = f"{macro_dir.rstrip('/')}/{file_name}"
 
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             sftp = client.open_sftp()
             try:
                 with sftp.open(remote_path, "rb") as remote_file:
                     return remote_file.read()
             finally:
                 sftp.close()
-    except Exception as exc:  # noqa: BLE001
+    except (OSError, RuntimeError) as exc:
         raise RuntimeError(f"SFTP macro file byte read failed: {exc}") from exc
 
 

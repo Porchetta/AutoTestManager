@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
 
@@ -40,9 +40,31 @@ class HostConfig(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     ip: Mapped[str] = mapped_column(String(100), nullable=False)
+    modifier: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+
+    credentials: Mapped[list["HostCredential"]] = relationship(
+        "HostCredential",
+        back_populates="host",
+        cascade="all, delete-orphan",
+        order_by="HostCredential.login_user",
+    )
+
+
+class HostCredential(TimestampMixin, Base):
+    __tablename__ = "host_credentials"
+    __table_args__ = (
+        UniqueConstraint("host_id", "login_user", name="uq_host_credential_host_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    host_id: Mapped[int] = mapped_column(
+        ForeignKey("host_configs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     login_user: Mapped[str] = mapped_column(String(100), nullable=False)
     login_password: Mapped[str] = mapped_column(String(255), nullable=False)
     modifier: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+
+    host: Mapped[HostConfig] = relationship("HostConfig", back_populates="credentials")
 
 
 class RtdConfig(TimestampMixin, Base):
@@ -54,6 +76,7 @@ class RtdConfig(TimestampMixin, Base):
     business_unit: Mapped[str] = mapped_column(String(100), nullable=False)
     home_dir_path: Mapped[str] = mapped_column(String(255), nullable=False)
     host_name: Mapped[str] = mapped_column(ForeignKey("host_configs.name"), nullable=False)
+    login_user: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     modifier: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
@@ -65,11 +88,27 @@ class EzdfsConfig(TimestampMixin, Base):
     port: Mapped[int] = mapped_column(Integer, nullable=False)
     home_dir_path: Mapped[str] = mapped_column(String(255), nullable=False)
     host_name: Mapped[str] = mapped_column(ForeignKey("host_configs.name"), nullable=False)
+    login_user: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     modifier: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
 class TestTask(TimestampMixin, Base):
     __tablename__ = "test_tasks"
+    __table_args__ = (
+        Index(
+            "ix_test_tasks_user_type_requested",
+            "user_id", "test_type", "requested_at",
+        ),
+        Index(
+            "ix_test_tasks_user_type_target",
+            "user_id", "test_type", "target_name",
+        ),
+        Index(
+            "ix_test_tasks_active",
+            "status", "requested_at", "id",
+            sqlite_where=text("status IN ('RUNNING','PENDING')"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     task_id: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)

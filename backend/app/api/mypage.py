@@ -11,14 +11,16 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.core.responses import success_response
 from app.models.entities import DashboardLike, RtdConfig, TestTask, User
-from app.services.file_service import (
-    generate_summary_file,
+from app.services.file_download import (
     get_ezdfs_raw_content_path,
     get_existing_download_path,
     get_rtd_raw_rule_file_map,
 )
+from app.services.file_service import generate_summary_file
 from app.services.task_service import ensure_task_owner, list_tasks_by_type, serialize_task
 from app.utils.enums import ActionType, TaskStatus, TestType
+from app.utils.constants import TARGET_SUFFIX
+from app.utils.naming import normalize_target_line_name
 
 router = APIRouter(prefix="/api/mypage", tags=["mypage"])
 
@@ -26,19 +28,12 @@ _RESULT_TEST_ACTIONS = [ActionType.TEST.value, ActionType.RETEST.value]
 _PAGE_SIZE = 8
 
 
-# ─── helpers ────────────────────────────────────────────────────────────────
-
-def _normalize_line(target_name: str) -> str:
-    s = str(target_name or "").strip()
-    return s[: -len("_TARGET")] if s.endswith("_TARGET") else s
-
-
 def _task_rule_name(task: TestTask) -> str:
     try:
         p = json.loads(task.requested_payload_json or "{}")
         n = p.get("payload") if isinstance(p.get("payload"), dict) else p
         return str(n.get("selected_rule") or p.get("rule_name") or "").strip()
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return ""
 
 
@@ -60,7 +55,7 @@ def _task_rule_names(task: TestTask) -> list[str]:
             return rule_names
         fallback_rule = str(n.get("selected_rule") or p.get("rule_name") or "").strip()
         return [fallback_rule] if fallback_rule else []
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return []
 
 
@@ -69,7 +64,7 @@ def _task_module_name(task: TestTask) -> str:
         p = json.loads(task.requested_payload_json or "{}")
         n = p.get("payload") if isinstance(p.get("payload"), dict) else p
         return str(n.get("selected_module") or p.get("module_name") or "").strip()
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError):
         return ""
 
 
@@ -376,7 +371,7 @@ def dashboard_queue(
 
     rtd_line_names = sorted(
         {
-            _normalize_line(task.target_name)
+            normalize_target_line_name(task.target_name)
             for task in tasks
             if task.test_type == TestType.RTD.value
         }
@@ -394,7 +389,7 @@ def dashboard_queue(
         user_name = user_name_map.get(task.user_id, task.user_id)
 
         if task.test_type == TestType.RTD.value:
-            line_name = _normalize_line(task.target_name)
+            line_name = normalize_target_line_name(task.target_name)
             business_unit = rtd_business_unit_map.get(line_name, line_name)
             action_label = _rtd_action_display_name(task.action_type)
             group_key = ("RTD", business_unit, action_label, task.user_id)
@@ -469,7 +464,7 @@ def rtd_raw_options(
         )
         .all()
     )
-    lines = sorted({_normalize_line(t.target_name) for t in tasks if t.target_name})
+    lines = sorted({normalize_target_line_name(t.target_name) for t in tasks if t.target_name})
     rules = sorted({rule_name for t in tasks for rule_name in (_task_rule_names(t) or get_rtd_raw_rule_file_map(t).keys()) if rule_name})
     return success_response({"lines": lines, "rules": rules})
 
@@ -494,7 +489,7 @@ def rtd_raw_list(
     )
     if line:
         q = q.filter(
-            or_(TestTask.target_name == line, TestTask.target_name == line + "_TARGET")
+            or_(TestTask.target_name == line, TestTask.target_name == line + TARGET_SUFFIX)
         )
     items_all: list[dict[str, str | None]] = []
     for t in q.all():
@@ -506,7 +501,7 @@ def rtd_raw_list(
             items_all.append(
                 {
                     "task_id": t.task_id,
-                    "line": _normalize_line(t.target_name),
+                    "line": normalize_target_line_name(t.target_name),
                     "rule": rule_name,
                     "requested_at": t.requested_at.isoformat() if t.requested_at else None,
                 }
@@ -537,7 +532,7 @@ def rtd_summary_list(
         .all()
     )
 
-    line_names = {_normalize_line(t.target_name) for t in tasks}
+    line_names = {normalize_target_line_name(t.target_name) for t in tasks}
     bu_map = {
         c.line_name: c.business_unit
         for c in db.query(RtdConfig).filter(RtdConfig.line_name.in_(line_names)).all()
@@ -547,7 +542,7 @@ def rtd_summary_list(
     items = [
         {
             "task_id": t.task_id,
-            "business_unit": bu_map.get(_normalize_line(t.target_name), _normalize_line(t.target_name)),
+            "business_unit": bu_map.get(normalize_target_line_name(t.target_name), normalize_target_line_name(t.target_name)),
             "requested_at": t.requested_at.isoformat() if t.requested_at else None,
         }
         for t in paged

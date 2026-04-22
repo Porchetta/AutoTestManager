@@ -3,120 +3,248 @@ from __future__ import annotations
 """
 ezDFS catalog custom flow
 
-1. fetch_rule_source_file_names()
-   deployed 디렉토리에서 현재 rule `.rul` 파일명을 읽는다.
-2. fetch_backup_rule_source_file_names()
-   backup 디렉토리에서 old version 후보 `.rul` 파일명을 읽는다.
-3. parse_rule_catalog_entries()
-   파일명을 `rule_name + version` 형태의 catalog row로 변환한다.
-4. read_rule_source_text() / read_rule_source_bytes()
-   선택한 deployed rule 파일 본문을 문자열이나 바이트로 읽는다.
-5. extract_sub_rule_list_from_rule_text() / resolve_recursive_sub_rule_list()
-   rule 안에 참조된 sub rule을 직접 추출하고, 필요하면 하위 rule까지 재귀적으로 확장한다.
+Public API:
+1. get_rule_file_list()
+   deployed 디렉토리에서 `{file_name, rule_name, version}` catalog row
+   리스트를 1-step으로 반환한다.
+2. get_backup_file_list()
+   backup 디렉토리에서 같은 스키마로 반환 (old version 후보 조회용).
+3. get_version_from_filename()
+   파일명에서 `ver.x.y.z` 토큰만 추출하는 pure helper.
+4. get_subrule_file_list()
+   rule 파일이 **재귀적으로** 참조하는 sub rule 이름 목록을 반환한다.
+   caller가 이미 catalog를 들고 있으면 `catalog_files`로 전달해 재조회를
+   피할 수 있다.
+5. read_rule_source_text() / read_rule_source_bytes()
+   선택된 deployed rule 파일 본문을 문자열/바이트로 읽는다.
+6. find_latest_backup_version()
+   backup catalog에서 하나의 rule에 대한 최신 버전을 선택한다.
 """
 
 import posixpath
 import re
 import shlex
 
+from app.core.exceptions import CatalogError, SSHConnectionError
 from app.models.entities import HostConfig
 from app.services.ssh_runtime import open_limited_ssh_client
+from app.utils.ssh_helpers import build_clean_bash_command
 
 
-def fetch_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[str]:
+_EZDFS_FILE_RE = re.compile(
+    r"^(?P<rule_name>.+?)-(?P<version>ver\.[^.]+(?:\.[^.]+)*)\.(?P<timestamp>[^.]+)\.rul$",
+    flags=re.IGNORECASE,
+)
+
+
+def get_rule_file_list(
+    host: HostConfig, login_user: str, home_dir_path: str
+) -> list[dict[str, str]]:
     """
-    Discover ezDFS deployed rule filenames from the remote module directory.
-
-    Input:
-    - host: SSH connection target that owns the ezDFS module files.
-    - home_dir_path: ezDFS module home path from admin config.
+    Discover ezDFS deployed rule files and return structured catalog rows
+    in a single step.
 
     Returns:
-    - list[str]: Bare `.rul` filenames found in the deployed directory.
-
-    Behavior:
-    - resolves `<home_dir_path>/repository/container/dfsdev/deployed`
-    - lists only top-level `.rul` files
-    - ignores hidden files
+    - list[dict[str, str]]: rows with `file_name`, `rule_name`, `version`.
+      Sorted by (rule_name, version) case-insensitively.
     """
     deployed_dir = _deployed_dir_from_home(home_dir_path)
-    command = _build_clean_bash_command(
-        f"cd {shlex.quote(deployed_dir)} && find . -maxdepth 1 -type f -name '*.rul' -printf \"%f\\n\""
-    )
-
-    try:
-        with open_limited_ssh_client(host) as client:
-            _, stdout, stderr = client.exec_command(command, timeout=10)
-            exit_status = stdout.channel.recv_exit_status()
-            output = stdout.read().decode("utf-8", errors="ignore")
-            error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SSH connection failed: {exc}") from exc
-
-    if exit_status != 0:
-        raise RuntimeError(error_output or "Failed to list ezDFS rule files")
-
-    return [line.strip() for line in output.splitlines() if line.strip() and not line.startswith(".")]
+    file_names = _list_rul_file_names(host, login_user, deployed_dir, "deployed")
+    return _parse_rule_catalog_entries(file_names)
 
 
-def fetch_backup_rule_source_file_names(host: HostConfig, home_dir_path: str) -> list[str]:
+def get_backup_file_list(
+    host: HostConfig, login_user: str, home_dir_path: str
+) -> list[dict[str, str]]:
     """
-    Discover backup ezDFS rule filenames from the remote backup directory.
-
-    Input:
-    - host: SSH connection target.
-    - home_dir_path: ezDFS module home path.
-
-    Returns:
-    - list[str]: Bare `.rul` filenames found in the backup directory.
-
-    Behavior:
-    - resolves `<home_dir_path>/repository/container/dfsdev/backup`
-    - lists only top-level `.rul` files
-    - used to find old-version candidates for comparison
+    Discover ezDFS backup rule files and return structured catalog rows
+    for old-version lookups.
     """
     backup_dir = _backup_dir_from_home(home_dir_path)
-    command = _build_clean_bash_command(
-        f"cd {shlex.quote(backup_dir)} && find . -maxdepth 1 -type f -name '*.rul' -printf \"%f\\n\""
+    file_names = _list_rul_file_names(host, login_user, backup_dir, "backup")
+    return _parse_rule_catalog_entries(file_names)
+
+
+def get_version_from_filename(file_name: str) -> str:
+    """
+    Extract the ezDFS version token (`ver.x.y.z`) from one `.rul` filename.
+
+    Format: `{rule_name}-ver.{version}.{timestamp}.rul`.
+    Returns `""` when the filename does not match this convention.
+    """
+    normalized = str(file_name or "").strip()
+    match = _EZDFS_FILE_RE.match(normalized)
+    if not match:
+        return ""
+    return str(match.group("version") or "").strip("._- ")
+
+
+def get_subrule_file_list(
+    host: HostConfig,
+    login_user: str,
+    home_dir_path: str,
+    rule_file_name: str,
+    catalog_files: list[dict[str, str]] | None = None,
+) -> list[str]:
+    """
+    Return sub-rule **rule_names** (not file names) reachable from one root
+    deployed rule file via recursive traversal.
+
+    Input:
+    - rule_file_name: A `file_name` from `get_rule_file_list()` (the root).
+    - catalog_files: Optional pre-fetched catalog. When None the function
+      fetches it once via `get_rule_file_list()`.
+
+    Returns:
+    - list[str]: Unique sub-rule `rule_name`s in first-seen order.
+      Note that the returned values are logical rule_names. The on-disk
+      file convention is `{rule_name}-ver.{version}.{timestamp}.rul` so
+      callers that need the actual file must resolve via the catalog.
+    """
+    catalog = (
+        catalog_files
+        if catalog_files is not None
+        else get_rule_file_list(host, login_user, home_dir_path)
+    )
+
+    normalized_root_name = str(rule_file_name or "").strip()
+    root_entry = next(
+        (item for item in catalog if str(item.get("file_name", "")).strip() == normalized_root_name),
+        None,
+    )
+    preferred_version = str(root_entry.get("version", "")).strip() if root_entry else ""
+
+    try:
+        root_text = read_rule_source_text(host, login_user, home_dir_path, rule_file_name)
+    except (CatalogError, OSError):
+        return []
+
+    resolved: list[str] = []
+    seen_rules: set[str] = set()
+
+    def walk(rule_text: str) -> None:
+        for sub_rule_name in _extract_sub_rule_names_from_text(rule_text):
+            if sub_rule_name not in resolved:
+                resolved.append(sub_rule_name)
+
+            if sub_rule_name in seen_rules:
+                continue
+            seen_rules.add(sub_rule_name)
+
+            child_file_name = _find_catalog_file_name_by_rule_name(
+                catalog,
+                sub_rule_name,
+                preferred_version=preferred_version,
+            )
+            if not child_file_name:
+                continue
+
+            try:
+                child_text = read_rule_source_text(host, login_user, home_dir_path, child_file_name)
+            except (CatalogError, OSError):
+                continue
+
+            walk(child_text)
+
+    walk(root_text)
+    return resolved
+
+
+def read_rule_source_text(
+    host: HostConfig, login_user: str, home_dir_path: str, file_name: str
+) -> str:
+    """Read one deployed ezDFS rule file body as UTF-8 text over SSH."""
+    deployed_dir = _deployed_dir_from_home(home_dir_path)
+    command = build_clean_bash_command(
+        f"cd {shlex.quote(deployed_dir)} && cat {shlex.quote(file_name)}"
     )
 
     try:
-        with open_limited_ssh_client(host) as client:
+        with open_limited_ssh_client(host, login_user) as client:
             _, stdout, stderr = client.exec_command(command, timeout=10)
             exit_status = stdout.channel.recv_exit_status()
             output = stdout.read().decode("utf-8", errors="ignore")
             error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SSH connection failed: {exc}") from exc
+    except (SSHConnectionError, OSError) as exc:
+        raise CatalogError(f"SSH file read failed: {exc}") from exc
 
     if exit_status != 0:
-        raise RuntimeError(error_output or "Failed to list ezDFS backup rule files")
+        raise RuntimeError(error_output or f"Failed to read ezDFS rule file: {file_name}")
 
-    return [line.strip() for line in output.splitlines() if line.strip() and not line.startswith(".")]
+    return output
 
 
-def parse_rule_catalog_entries(file_names: list[str]) -> list[dict[str, str]]:
-    """
-    Convert raw ezDFS filenames into catalog rows.
+def read_rule_source_bytes(
+    host: HostConfig, login_user: str, home_dir_path: str, file_name: str
+) -> bytes:
+    """Read one deployed ezDFS rule file as raw bytes over SFTP."""
+    deployed_dir = _deployed_dir_from_home(home_dir_path)
+    remote_path = f"{deployed_dir.rstrip('/')}/{file_name}"
 
-    Input:
-    - file_names: Raw `.rul` filenames from deployed or backup directories.
+    try:
+        with open_limited_ssh_client(host, login_user) as client:
+            sftp = client.open_sftp()
+            try:
+                with sftp.open(remote_path, "rb") as remote_file:
+                    return remote_file.read()
+            finally:
+                sftp.close()
+    except (SSHConnectionError, OSError) as exc:
+        raise CatalogError(f"SFTP byte read failed: {exc}") from exc
 
-    Returns:
-    - list[dict[str, str]]: Sorted catalog rows with:
-      - file_name: original filename
-      - rule_name: logical ezDFS rule name
-      - version: parsed version token including `ver.`
 
-    Expected filename format:
-    - `{rule_name}-ver.{version}.{timestamp}.rul`
+def find_latest_backup_version(
+    backup_catalog_files: list[dict[str, str]],
+    rule_name: str,
+    excluded_version: str = "",
+) -> str:
+    """Pick the newest available backup version for one ezDFS rule."""
+    normalized_rule_name = str(rule_name or "").strip().lower()
+    normalized_excluded_version = str(excluded_version or "").strip().lower()
 
-    Behavior:
-    - preserves the original file name
-    - parses `rule_name`
-    - parses `version`
-    - ignores the trailing timestamp token
-    """
+    matching_versions = [
+        str(item.get("version", "")).strip()
+        for item in backup_catalog_files
+        if str(item.get("rule_name", "")).strip().lower() == normalized_rule_name
+        and str(item.get("version", "")).strip()
+        and str(item.get("version", "")).strip().lower() != normalized_excluded_version
+    ]
+
+    if not matching_versions:
+        return ""
+
+    return max(matching_versions, key=_version_sort_key)
+
+
+def _list_rul_file_names(
+    host: HostConfig, login_user: str, remote_dir: str, label: str
+) -> list[str]:
+    """List bare `.rul` filenames directly under the given remote directory."""
+    command = build_clean_bash_command(
+        f"cd {shlex.quote(remote_dir)} && find . -maxdepth 1 -type f -name '*.rul' -printf \"%f\\n\""
+    )
+
+    try:
+        with open_limited_ssh_client(host, login_user) as client:
+            _, stdout, stderr = client.exec_command(command, timeout=10)
+            exit_status = stdout.channel.recv_exit_status()
+            output = stdout.read().decode("utf-8", errors="ignore")
+            error_output = stderr.read().decode("utf-8", errors="ignore").strip()
+    except (SSHConnectionError, OSError) as exc:
+        raise CatalogError(f"SSH connection failed: {exc}") from exc
+
+    if exit_status != 0:
+        raise CatalogError(error_output or f"Failed to list ezDFS {label} rule files")
+
+    return [
+        line.strip()
+        for line in output.splitlines()
+        if line.strip() and not line.startswith(".")
+    ]
+
+
+def _parse_rule_catalog_entries(file_names: list[str]) -> list[dict[str, str]]:
+    """Convert raw `.rul` filenames into sorted catalog rows."""
     catalog_files: list[dict[str, str]] = []
 
     for file_name in file_names:
@@ -124,11 +252,7 @@ def parse_rule_catalog_entries(file_names: list[str]) -> list[dict[str, str]]:
         if not normalized:
             continue
 
-        match = re.match(
-            r"^(?P<rule_name>.+?)-(?P<version>ver\.[^.]+(?:\.[^.]+)*)\.(?P<timestamp>[^.]+)\.rul$",
-            normalized,
-            flags=re.IGNORECASE,
-        )
+        match = _EZDFS_FILE_RE.match(normalized)
         if not match:
             continue
 
@@ -151,74 +275,8 @@ def parse_rule_catalog_entries(file_names: list[str]) -> list[dict[str, str]]:
     )
 
 
-def read_rule_source_text(host: HostConfig, home_dir_path: str, file_name: str) -> str:
-    """
-    Read one deployed ezDFS rule file over SSH.
-
-    Input:
-    - host: SSH connection target.
-    - home_dir_path: ezDFS module home path.
-    - file_name: Bare deployed `.rul` filename.
-
-    Returns:
-    - str: Full rule file text.
-    """
-    deployed_dir = _deployed_dir_from_home(home_dir_path)
-    command = _build_clean_bash_command(
-        f"cd {shlex.quote(deployed_dir)} && cat {shlex.quote(file_name)}"
-    )
-
-    try:
-        with open_limited_ssh_client(host) as client:
-            _, stdout, stderr = client.exec_command(command, timeout=10)
-            exit_status = stdout.channel.recv_exit_status()
-            output = stdout.read().decode("utf-8", errors="ignore")
-            error_output = stderr.read().decode("utf-8", errors="ignore").strip()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SSH file read failed: {exc}") from exc
-
-    if exit_status != 0:
-        raise RuntimeError(error_output or f"Failed to read ezDFS rule file: {file_name}")
-
-    return output
-
-
-def read_rule_source_bytes(host: HostConfig, home_dir_path: str, file_name: str) -> bytes:
-    """Read one deployed ezDFS rule file as raw bytes over SFTP."""
-    deployed_dir = _deployed_dir_from_home(home_dir_path)
-    remote_path = f"{deployed_dir.rstrip('/')}/{file_name}"
-    
-    try:
-        with open_limited_ssh_client(host) as client:
-            sftp = client.open_sftp()
-            try:
-                with sftp.open(remote_path, "rb") as remote_file:
-                    return remote_file.read()
-            finally:
-                sftp.close()
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"SFTP byte read failed: {exc}") from exc
-
-
-def extract_sub_rule_list_from_rule_text(rule_text: str, rule_name: str) -> list[str]:
-    """
-    Extract direct sub-rule references from one ezDFS rule text.
-
-    Input:
-    - rule_text: Full deployed ezDFS rule file text.
-    - rule_name: Current root rule name. Unused for now, but kept so custom
-      parsers can use rule-specific heuristics later.
-
-    Returns:
-    - list[str]: Unique sub-rule names in first-seen order, without `.rul`.
-
-    Behavior:
-    - scans each line for `*.rul` references
-    - ignores blank lines and comment-only lines
-    - strips trailing inline comments
-    - removes duplicates while preserving order
-    """
-    _ = rule_name
+def _extract_sub_rule_names_from_text(rule_text: str) -> list[str]:
+    """Parse direct sub-rule references (`*.rul`) from one ezDFS rule text."""
     items: list[str] = []
 
     for raw_line in rule_text.splitlines():
@@ -245,71 +303,6 @@ def extract_sub_rule_list_from_rule_text(rule_text: str, rule_name: str) -> list
         seen.add(item)
         result.append(item)
     return result
-
-
-def resolve_recursive_sub_rule_list(
-    host: HostConfig,
-    home_dir_path: str,
-    root_rule_text: str,
-    catalog_files: list[dict[str, str]],
-    preferred_version: str = "",
-) -> list[str]:
-    """
-    Resolve the full recursive ezDFS sub-rule tree starting from one root rule.
-
-    Input:
-    - host: SSH connection target.
-    - home_dir_path: ezDFS module home path.
-    - root_rule_text: Full text of the selected root rule.
-    - catalog_files: Catalog rows used to map `rule_name -> file_name`.
-    - preferred_version: Optional version preference when multiple rule files
-      exist for the same rule name.
-
-    Returns:
-    - list[str]: Unique sub-rule names discovered through recursive traversal.
-
-    Behavior:
-    - extracts direct sub-rules from the current rule text
-    - resolves the corresponding child file from catalog metadata
-    - reads the child rule file and repeats the same scan
-    - keeps first-seen order across the whole tree
-    """
-    resolved: list[str] = []
-    seen_rules: set[str] = set()
-
-    def walk_source_text(rule_text: str) -> None:
-        direct_items = extract_sub_rule_list_from_rule_text(rule_text, "")
-        for item in direct_items:
-            if item not in resolved:
-                resolved.append(item)
-
-            normalized_rule_name = str(item or "").strip()
-            if not normalized_rule_name or normalized_rule_name in seen_rules:
-                continue
-
-            seen_rules.add(normalized_rule_name)
-            child_file_name = _find_catalog_file_name_by_rule_name(
-                catalog_files,
-                normalized_rule_name,
-                preferred_version=preferred_version,
-            )
-            if not child_file_name:
-                continue
-
-            try:
-                child_rule_text = read_rule_source_text(host, home_dir_path, child_file_name)
-            except Exception:  # noqa: BLE001
-                continue
-
-            walk_source_text(child_rule_text)
-
-    walk_source_text(root_rule_text)
-    return resolved
-
-
-def _build_clean_bash_command(command: str) -> str:
-    """Wrap a shell snippet so it runs in a minimal non-interactive bash."""
-    return f"bash --noprofile --norc -lc {shlex.quote(command)}"
 
 
 def _deployed_dir_from_home(home_dir_path: str) -> str:
@@ -343,39 +336,6 @@ def _find_catalog_file_name_by_rule_name(
         if str(item.get("rule_name", "")).strip().lower() == normalized_rule_name:
             return str(item.get("file_name", "")).strip() or None
     return None
-
-
-def find_latest_backup_version(
-    backup_catalog_files: list[dict[str, str]],
-    rule_name: str,
-    excluded_version: str = "",
-) -> str:
-    """
-    Pick the newest available backup version for one ezDFS rule.
-
-    Input:
-    - backup_catalog_files: Parsed backup catalog rows.
-    - rule_name: Rule whose old version is needed.
-    - excluded_version: Current deployed version to exclude from candidates.
-
-    Returns:
-    - str: Best matching old version, or empty string when unavailable.
-    """
-    normalized_rule_name = str(rule_name or "").strip().lower()
-    normalized_excluded_version = str(excluded_version or "").strip().lower()
-
-    matching_versions = [
-        str(item.get("version", "")).strip()
-        for item in backup_catalog_files
-        if str(item.get("rule_name", "")).strip().lower() == normalized_rule_name
-        and str(item.get("version", "")).strip()
-        and str(item.get("version", "")).strip().lower() != normalized_excluded_version
-    ]
-
-    if not matching_versions:
-        return ""
-
-    return max(matching_versions, key=_version_sort_key)
 
 
 def _version_sort_key(version: str) -> tuple:

@@ -2,6 +2,7 @@ import { ref } from "vue";
 import { defineStore } from "pinia";
 
 import { apiDelete, apiGet, apiPost, apiPut, downloadFile } from "../api";
+import { waitForTaskTerminalStatus } from "../composables/useTaskPolling";
 
 export const useEzdfsStore = defineStore("ezdfs", () => {
   const currentStep = ref(1);
@@ -18,6 +19,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
   const majorChangeItems = ref({});
   const currentTask = ref(null);
   const tasks = ref([]);
+  const flowTaskIds = ref([]);
   const modules = ref([]);
   const rules = ref([]);
   const subRuleError = ref("");
@@ -80,6 +82,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
       major_change_items: majorChangeItems.value,
       active_task_id: currentTask.value?.task_id || null,
       latest_status: currentTask.value?.status || null,
+      flow_task_ids: flowTaskIds.value,
       svn_upload: svnUpload.value,
     });
   }
@@ -109,6 +112,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     subRuleMap.value = subRulesSearched.value ? (session.sub_rule_map || {}) : {};
     selectedSubRules.value = subRulesSearched.value ? (session.selected_sub_rules || []) : [];
     majorChangeItems.value = session.major_change_items || {};
+    flowTaskIds.value = Array.isArray(session.flow_task_ids) ? session.flow_task_ids : [];
     svnUpload.value = session.svn_upload || {};
     currentTask.value = session.active_task_id ? { task_id: session.active_task_id } : null;
 
@@ -284,6 +288,12 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
     await saveSession();
   }
 
+  function addFlowTaskId(taskId) {
+    if (taskId && !flowTaskIds.value.includes(taskId)) {
+      flowTaskIds.value = [...flowTaskIds.value, taskId];
+    }
+  }
+
   async function run(action = "test") {
     const data = await apiPost(`/api/ezdfs/actions/${action}`, {
       module_name: selectedModule.value,
@@ -302,6 +312,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
       },
     });
     currentTask.value = data.task;
+    addFlowTaskId(data.task?.task_id);
     await refreshTasks();
     await saveSession();
     return data.task;
@@ -337,6 +348,7 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
       },
     });
     currentTask.value = data.task;
+    addFlowTaskId(data.task?.task_id);
     await refreshTasks();
     await saveSession();
     return data.task;
@@ -352,25 +364,16 @@ export const useEzdfsStore = defineStore("ezdfs", () => {
   }
 
   async function waitForTasks(taskIds, intervalMs = 1200, timeoutMs = 10 * 60 * 1000) {
-    const startedAt = Date.now();
-    const targetIds = new Set(taskIds.filter(Boolean));
-    if (!targetIds.size) {
-      return [];
-    }
-
-    while (Date.now() - startedAt < timeoutMs) {
-      await refreshTasks();
-      const resolved = tasks.value.filter((task) => targetIds.has(task.task_id));
-      if (
-        resolved.length === targetIds.size &&
-        resolved.every((task) => ["DONE", "FAIL", "CANCELED"].includes(task.status))
-      ) {
-        return resolved;
-      }
-      await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
-    }
-
-    throw new Error("작업 완료를 기다리는 중 시간이 초과되었습니다.");
+    return waitForTaskTerminalStatus(
+      refreshTasks,
+      (ids) => tasks.value.filter((task) => ids.includes(task.task_id)),
+      taskIds,
+      {
+        intervalMs,
+        timeoutMs,
+        timeoutMessage: "작업 완료를 기다리는 중 시간이 초과되었습니다.",
+      },
+    );
   }
 
   async function generateReportsForTasks(taskIds) {

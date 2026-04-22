@@ -1,0 +1,184 @@
+/* ---------- Dashboard Stats Grid ---------- */
+.dashboard-stats-grid {
+  gap: 16px;
+}
+
+.dashboard-stats-grid .stats-mini-chart {
+  padding: 10px 12px 8px;
+}
+
+.dashboard-stats-grid .stats-mini-bars {
+  height: 56px;
+}
+
+.dashboard-stats-grid .stats-mini-bar:nth-child(n) {
+  /* ezDFS 구분: 3·4번째 차트는 부모 nth-child로 구분되므로 색상은 기존 CSS 그대로 */
+}
+
+/* ---------- Dashboard Specific ---------- */
+.dashboard-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.85fr);
+  gap: 24px;
+  align-items: stretch;
+  min-height: 240px;
+}
+
+.dashboard-hero-copy {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.dashboard-hero-copy h2 {
+  font-size: clamp(1.5rem, 2.4vw, 2rem);
+  letter-spacing: -0.03em;
+}
+
+.dashboard-hero-copy p {
+  margin: 0;
+  max-width: 680px;
+  color: var(--muted-strong);
+}
+
+.dashboard-hero-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dashboard-like-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted-strong);
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition: all 0.16s ease;
+}
+
+.dashboard-like-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.dashboard-like-button:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--bg-soft);
+}
+
+.dashboard-like-button.is-active {
+  color: var(--danger);
+  border-color: rgba(220, 38, 38, 0.22);
+  background: var(--danger-weak);
+}
+
+.dashboard-summary-rail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.dashboard-summary-tile {
+  display: grid;
+  gap: 4px;
+  min-height: unset;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+}
+
+.dashboard-summary-tile strong {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.dashboard-summary-tile p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.dashboard-overview-console {
+  min-height: 180px;
+}
+
+.dashboard-queue-panel {
+  min-height: 180px;
+}
+
+.dashboard-queue-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+.dashboard-queue-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.dashboard-queue-copy {
+  min-width: 0;
+}
+
+.dashboard-queue-copy strong {
+  display: block;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+.dashboard-queue-copy p {
+  margin: 3px 0 0;
+  font-size: 0.78rem;
+}
+
+.dashboard-console-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dashboard-console-item {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: var(--panel-sunken);
+  border: 1px solid var(--border);
+}
+
+.dashboard-console-item strong {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-console-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
