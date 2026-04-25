@@ -43,7 +43,11 @@ Run:
   cd "$SCRIPT_DIR"
   uvicorn app.main:app --reload --host 0.0.0.0 --port 10223
 
+Or use the helper:
+  "$SCRIPT_DIR/run-dev.sh"
+
 Data:
   DB      : $DATA_DIR/autotestmanager.db
+  DB Web  : http://127.0.0.1:8080
   Results : $DATA_DIR/results
 EOF

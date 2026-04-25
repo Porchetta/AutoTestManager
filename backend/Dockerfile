@@ -14,6 +14,7 @@ ENV DB_PATH=/data/autotestmanager.db
 ENV RESULT_BASE_PATH=/data/results
 
 EXPOSE 10223
+EXPOSE 8080
 EXPOSE 5678
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10223"]

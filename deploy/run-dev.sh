@@ -24,6 +24,23 @@ if [[ ! -f "${BASE_DIR}/backend.env" ]]; then
   exit 1
 fi
 
+read_env_value() {
+  local key="$1"
+  awk -F= -v key="$key" '
+    $1 == key {
+      sub(/^[^=]*=/, "")
+      gsub(/^["'\'']|["'\'']$/, "")
+      print
+      exit
+    }
+  ' "${BASE_DIR}/backend.env"
+}
+
+SQLITE_WEB_PORT="${SQLITE_WEB_PORT:-$(read_env_value SQLITE_WEB_PORT)}"
+SQLITE_WEB_PORT="${SQLITE_WEB_PORT:-8080}"
+SQLITE_WEB_READ_ONLY="${SQLITE_WEB_READ_ONLY:-$(read_env_value SQLITE_WEB_READ_ONLY)}"
+SQLITE_WEB_READ_ONLY="${SQLITE_WEB_READ_ONLY:-0}"
+
 echo "=== Stopping existing containers ==="
 docker stop atm-backend atm-frontend 2>/dev/null || true
 docker rm   atm-backend atm-frontend 2>/dev/null || true
@@ -32,18 +49,24 @@ echo ""
 echo "=== Starting backend (dev, --reload) ==="
 echo "    container user: ${HOST_UID}:${HOST_GID}"
 echo "    debugpy port  : ${BACKEND_DEBUG_PORT}"
+echo "    sqlite-web    : ${SQLITE_WEB_PORT}"
+echo "    db read-only  : ${SQLITE_WEB_READ_ONLY}"
 docker run -d \
   --name atm-backend \
   --network atm-net \
   --restart unless-stopped \
   --user "${HOST_UID}:${HOST_GID}" \
   -p 10223:10223 \
+  -p "${SQLITE_WEB_PORT}:${SQLITE_WEB_PORT}" \
   -p "${BACKEND_DEBUG_PORT}:${BACKEND_DEBUG_PORT}" \
   -v "${BASE_DIR}/backend/app:/app/app" \
   -v "${BACKEND_DATA_DIR}:/data" \
+  -e BACKEND_DEBUG_PORT="${BACKEND_DEBUG_PORT}" \
+  -e SQLITE_WEB_PORT="${SQLITE_WEB_PORT}" \
+  -e SQLITE_WEB_READ_ONLY="${SQLITE_WEB_READ_ONLY}" \
   --env-file "${BASE_DIR}/backend.env" \
   atm-backend:"${VERSION}" \
-  python -m debugpy --listen "0.0.0.0:${BACKEND_DEBUG_PORT}" -m uvicorn app.main:app --host 0.0.0.0 --port 10223 --reload
+  sh -c 'touch "${DB_PATH:-/data/autotestmanager.db}"; readonly_arg=""; if [ "${SQLITE_WEB_READ_ONLY:-0}" = "1" ]; then readonly_arg="--read-only"; fi; sqlite_web --host=0.0.0.0 --port="${SQLITE_WEB_PORT:-8080}" --no-browser ${readonly_arg} "${DB_PATH:-/data/autotestmanager.db}" & exec python -m debugpy --listen "0.0.0.0:${BACKEND_DEBUG_PORT}" -m uvicorn app.main:app --host 0.0.0.0 --port 10223 --reload'
 
 echo ""
 echo "=== Starting frontend (dev, Vite HMR, port 4203) ==="
@@ -64,6 +87,7 @@ echo "Dev environment started (image: ${VERSION})"
 echo ""
 echo "  Frontend : http://${SERVER_IP}:4203"
 echo "  Backend  : http://${SERVER_IP}:10223"
+echo "  DB Web   : http://${SERVER_IP}:${SQLITE_WEB_PORT}"
 echo "  Debugpy  : ${SERVER_IP}:${BACKEND_DEBUG_PORT}"
 echo "  API Docs : http://${SERVER_IP}:10223/docs"
 echo ""
