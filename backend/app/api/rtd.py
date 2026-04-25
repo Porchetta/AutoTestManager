@@ -6,6 +6,7 @@ import zipfile
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from starlette.responses import Response
 from sqlalchemy.orm import Session
 
@@ -32,6 +33,11 @@ from app.services.file_download import (
     get_rtd_raw_rule_file_map,
 )
 from app.services.file_service import generate_summary_file
+from app.services.rule_favorites import (
+    list_favorite_rule_names,
+    reorder_favorites_first,
+    set_favorite,
+)
 from app.services.session_service import clear_runtime_session, get_runtime_session_payload, upsert_runtime_session
 from app.services.svn_upload_custom import perform_rtd_svn_upload
 from app.services.task_service import (
@@ -88,7 +94,42 @@ def rules(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return success_response({"items": get_rules_by_line_name(db, current_user, line_name)})
+    items = get_rules_by_line_name(db, current_user, line_name)
+    favorites_db = list_favorite_rule_names(db, current_user.user_id, TestType.RTD, line_name)
+    # 현재 catalog에 존재하는 favorite만 노출 (stale은 DB에는 보존)
+    favorite_names = sorted(name for name in favorites_db if name in items)
+    ordered = reorder_favorites_first(items, set(favorite_names))
+    return success_response({"items": ordered, "favorite_names": favorite_names})
+
+
+class _RtdFavoriteRequest(BaseModel):
+    line_name: str
+    rule_name: str
+    favorite: bool
+
+
+@router.post("/rules/favorite")
+def toggle_rule_favorite(
+    payload: _RtdFavoriteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    new_state = set_favorite(
+        db,
+        current_user.user_id,
+        TestType.RTD,
+        payload.line_name,
+        payload.rule_name,
+        payload.favorite,
+    )
+    favorites_db = list_favorite_rule_names(
+        db, current_user.user_id, TestType.RTD, payload.line_name
+    )
+    return success_response({
+        "rule_name": payload.rule_name,
+        "favorite": new_state,
+        "favorite_names": sorted(favorites_db),
+    })
 
 
 @router.post("/macros/compare")

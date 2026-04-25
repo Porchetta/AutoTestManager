@@ -12,7 +12,23 @@ const {
   selectedRuleFileName,
   selectedRules,
   rules,
+  favoriteRuleNames,
 } = storeToRefs(ezdfsStore);
+
+function isFavoriteRule(name) {
+  return !!name && favoriteRuleNames.value.includes(name);
+}
+
+function ruleOptionLabel(item) {
+  return isFavoriteRule(item.rule_name)
+    ? `★ ${item.rule_name}`
+    : item.rule_name;
+}
+
+async function toggleFavoriteForCandidate() {
+  if (!selectedRule.value) return;
+  await ezdfsStore.toggleRuleFavorite(selectedRule.value);
+}
 
 async function chooseRule(ruleName) {
   await ezdfsStore.selectRule(ruleName);
@@ -61,10 +77,32 @@ async function removeRule(index) {
               :key="item.file_name"
               :value="item.file_name"
             >
-              {{ item.rule_name }}
+              {{ ruleOptionLabel(item) }}
             </option>
           </select>
         </label>
+        <div class="field rule-builder-action rule-builder-action-icon">
+          <span>&nbsp;</span>
+          <button
+            type="button"
+            class="button button-ghost favorite-toggle"
+            :class="{ 'is-active': isFavoriteRule(selectedRule) }"
+            :disabled="!selectedRule"
+            :title="
+              isFavoriteRule(selectedRule)
+                ? '즐겨찾기에서 제거'
+                : '즐겨찾기에 추가'
+            "
+            :aria-label="
+              isFavoriteRule(selectedRule)
+                ? '선택한 Rule을 즐겨찾기에서 제거'
+                : '선택한 Rule을 즐겨찾기에 추가'
+            "
+            @click="toggleFavoriteForCandidate"
+          >
+            {{ isFavoriteRule(selectedRule) ? "★" : "☆" }}
+          </button>
+        </div>
         <div class="field rule-builder-field">
           <span>2. New Version</span>
           <div class="field-static-value">
@@ -79,9 +117,7 @@ async function removeRule(index) {
         </div>
         <div class="field rule-builder-action">
           <span>&nbsp;</span>
-          <button class="button button-primary" @click="addRule">
-            추가
-          </button>
+          <button class="button button-primary" @click="addRule">추가</button>
         </div>
       </div>
     </div>
@@ -91,17 +127,12 @@ async function removeRule(index) {
         <p class="eyebrow">Selection Tray</p>
         <div class="manager-section-title-inline">
           <h4>추가된 테스트 대상 Rule</h4>
-          <span class="pill pill-ghost"
-            >{{ selectedRules.length }} Items</span
-          >
+          <span class="pill pill-ghost">{{ selectedRules.length }} Items</span>
         </div>
       </div>
     </div>
 
-    <div
-      v-if="selectedRules.length"
-      class="stack-list selection-tray-list"
-    >
+    <div v-if="selectedRules.length" class="stack-list selection-tray-list">
       <div
         v-for="(item, index) in selectedRules"
         :key="item.file_name"

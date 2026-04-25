@@ -29,6 +29,11 @@ class Settings(BaseSettings):
 
     cors_origins: str = "*"
 
+    task_retention_days: int = 90
+    task_retention_max_per_user: int = 1000
+    task_retention_sweep_interval_seconds: int = 6 * 60 * 60
+    task_retention_delete_files: bool = True
+
     default_admin_user_id: str = "admin"
     default_admin_password: str = "admin1234"
     default_admin_name: str = "Default Admin"

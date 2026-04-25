@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
 from app.core.responses import success_response
-from app.models.entities import DashboardLike, RtdConfig, TestTask, User
+from app.models.entities import DashboardLike, RtdConfig, TaskHistoryDaily, TestTask, User
 from app.services.file_download import (
     get_ezdfs_raw_content_path,
     get_existing_download_path,
@@ -115,40 +115,38 @@ def recent_ezdfs(
     return success_response({"items": [serialize_task(task) for task in tasks]})
 
 
-@router.get("/stats")
-def usage_stats(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+def _build_stats_payload(db: Session, user_id: str | None) -> dict:
+    """집계 테이블(TaskHistoryDaily)에서 14일 / 12개월 차트 데이터 생성.
+
+    user_id=None 이면 전체 사용자 합계 (Dashboard global 용).
+    """
     today = datetime.now(timezone.utc).date()
 
     daily_dates = [today - timedelta(days=i) for i in range(13, -1, -1)]
     daily_labels = [d.strftime("%m/%d") for d in daily_dates]
-    daily_start = daily_dates[0].isoformat()
-    daily_end = (today + timedelta(days=1)).isoformat()
+    daily_start = daily_dates[0]
+    daily_end = today + timedelta(days=1)
 
-    daily_rows = (
-        db.query(
-            func.strftime("%Y-%m-%d", TestTask.requested_at).label("day"),
-            TestTask.test_type,
-            func.count().label("cnt"),
-        )
-        .filter(
-            TestTask.user_id == current_user.user_id,
-            TestTask.requested_at >= daily_start,
-            TestTask.requested_at < daily_end,
-        )
-        .group_by("day", TestTask.test_type)
-        .all()
+    daily_q = db.query(
+        TaskHistoryDaily.date.label("day"),
+        TaskHistoryDaily.test_type,
+        func.sum(TaskHistoryDaily.count).label("cnt"),
+    ).filter(
+        TaskHistoryDaily.date >= daily_start,
+        TaskHistoryDaily.date < daily_end,
     )
+    if user_id is not None:
+        daily_q = daily_q.filter(TaskHistoryDaily.user_id == user_id)
+    daily_rows = daily_q.group_by(TaskHistoryDaily.date, TaskHistoryDaily.test_type).all()
 
     rtd_daily_map = {d.isoformat(): 0 for d in daily_dates}
     ezdfs_daily_map = {d.isoformat(): 0 for d in daily_dates}
     for row in daily_rows:
+        key = row.day.isoformat() if hasattr(row.day, "isoformat") else str(row.day)
         if row.test_type == TestType.RTD.value:
-            rtd_daily_map[row.day] = row.cnt
+            rtd_daily_map[key] = int(row.cnt or 0)
         elif row.test_type == TestType.EZDFS.value:
-            ezdfs_daily_map[row.day] = row.cnt
+            ezdfs_daily_map[key] = int(row.cnt or 0)
 
     monthly_keys: list[tuple[int, int]] = []
     for i in range(11, -1, -1):
@@ -160,40 +158,45 @@ def usage_stats(
         monthly_keys.append((y, m))
 
     monthly_labels = [f"{m}월" for _, m in monthly_keys]
-    m_start = f"{monthly_keys[0][0]}-{monthly_keys[0][1]:02d}-01"
+    m_start = date(monthly_keys[0][0], monthly_keys[0][1], 1)
     last_y, last_m = monthly_keys[-1]
     m_end_y, m_end_m = (last_y + 1, 1) if last_m == 12 else (last_y, last_m + 1)
-    monthly_end = f"{m_end_y}-{m_end_m:02d}-01"
+    monthly_end = date(m_end_y, m_end_m, 1)
 
-    monthly_rows = (
-        db.query(
-            func.strftime("%Y-%m", TestTask.requested_at).label("ym"),
-            TestTask.test_type,
-            func.count().label("cnt"),
-        )
-        .filter(
-            TestTask.user_id == current_user.user_id,
-            TestTask.requested_at >= m_start,
-            TestTask.requested_at < monthly_end,
-        )
-        .group_by("ym", TestTask.test_type)
-        .all()
+    monthly_q = db.query(
+        func.strftime("%Y-%m", TaskHistoryDaily.date).label("ym"),
+        TaskHistoryDaily.test_type,
+        func.sum(TaskHistoryDaily.count).label("cnt"),
+    ).filter(
+        TaskHistoryDaily.date >= m_start,
+        TaskHistoryDaily.date < monthly_end,
     )
+    if user_id is not None:
+        monthly_q = monthly_q.filter(TaskHistoryDaily.user_id == user_id)
+    monthly_rows = monthly_q.group_by("ym", TaskHistoryDaily.test_type).all()
 
     rtd_monthly_map = {f"{y}-{m:02d}": 0 for y, m in monthly_keys}
     ezdfs_monthly_map = {f"{y}-{m:02d}": 0 for y, m in monthly_keys}
     for row in monthly_rows:
         if row.test_type == TestType.RTD.value:
-            rtd_monthly_map[row.ym] = row.cnt
+            rtd_monthly_map[row.ym] = int(row.cnt or 0)
         elif row.test_type == TestType.EZDFS.value:
-            ezdfs_monthly_map[row.ym] = row.cnt
+            ezdfs_monthly_map[row.ym] = int(row.cnt or 0)
 
-    return success_response({
+    return {
         "rtd_daily":     {"labels": daily_labels,   "counts": list(rtd_daily_map.values())},
         "rtd_monthly":   {"labels": monthly_labels, "counts": list(rtd_monthly_map.values())},
         "ezdfs_daily":   {"labels": daily_labels,   "counts": list(ezdfs_daily_map.values())},
         "ezdfs_monthly": {"labels": monthly_labels, "counts": list(ezdfs_monthly_map.values())},
-    })
+    }
+
+
+@router.get("/stats")
+def usage_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return success_response(_build_stats_payload(db, current_user.user_id))
 
 
 # ─── Global stats (Dashboard용, 전체 유저) ────────────────────────────────────
@@ -203,81 +206,10 @@ def global_stats(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    today = datetime.now(timezone.utc).date()
-
-    daily_dates = [today - timedelta(days=i) for i in range(13, -1, -1)]
-    daily_labels = [d.strftime("%m/%d") for d in daily_dates]
-    daily_start = daily_dates[0].isoformat()
-    daily_end = (today + timedelta(days=1)).isoformat()
-
-    daily_rows = (
-        db.query(
-            func.strftime("%Y-%m-%d", TestTask.requested_at).label("day"),
-            TestTask.test_type,
-            func.count().label("cnt"),
-        )
-        .filter(
-            TestTask.requested_at >= daily_start,
-            TestTask.requested_at < daily_end,
-        )
-        .group_by("day", TestTask.test_type)
-        .all()
-    )
-
-    rtd_daily_map = {d.isoformat(): 0 for d in daily_dates}
-    ezdfs_daily_map = {d.isoformat(): 0 for d in daily_dates}
-    for row in daily_rows:
-        if row.test_type == TestType.RTD.value:
-            rtd_daily_map[row.day] = row.cnt
-        elif row.test_type == TestType.EZDFS.value:
-            ezdfs_daily_map[row.day] = row.cnt
-
-    monthly_keys: list[tuple[int, int]] = []
-    for i in range(11, -1, -1):
-        m = today.month - i
-        y = today.year
-        while m <= 0:
-            m += 12
-            y -= 1
-        monthly_keys.append((y, m))
-
-    monthly_labels = [f"{m}월" for _, m in monthly_keys]
-    m_start = f"{monthly_keys[0][0]}-{monthly_keys[0][1]:02d}-01"
-    last_y, last_m = monthly_keys[-1]
-    m_end_y, m_end_m = (last_y + 1, 1) if last_m == 12 else (last_y, last_m + 1)
-    monthly_end = f"{m_end_y}-{m_end_m:02d}-01"
-
-    monthly_rows = (
-        db.query(
-            func.strftime("%Y-%m", TestTask.requested_at).label("ym"),
-            TestTask.test_type,
-            func.count().label("cnt"),
-        )
-        .filter(
-            TestTask.requested_at >= m_start,
-            TestTask.requested_at < monthly_end,
-        )
-        .group_by("ym", TestTask.test_type)
-        .all()
-    )
-
-    rtd_monthly_map = {f"{y}-{m:02d}": 0 for y, m in monthly_keys}
-    ezdfs_monthly_map = {f"{y}-{m:02d}": 0 for y, m in monthly_keys}
-    for row in monthly_rows:
-        if row.test_type == TestType.RTD.value:
-            rtd_monthly_map[row.ym] = row.cnt
-        elif row.test_type == TestType.EZDFS.value:
-            ezdfs_monthly_map[row.ym] = row.cnt
-
+    payload = _build_stats_payload(db, user_id=None)
     like_count = db.query(func.count(DashboardLike.id)).scalar() or 0
-
-    return success_response({
-        "rtd_daily":     {"labels": daily_labels,   "counts": list(rtd_daily_map.values())},
-        "rtd_monthly":   {"labels": monthly_labels, "counts": list(rtd_monthly_map.values())},
-        "ezdfs_daily":   {"labels": daily_labels,   "counts": list(ezdfs_daily_map.values())},
-        "ezdfs_monthly": {"labels": monthly_labels, "counts": list(ezdfs_monthly_map.values())},
-        "dashboard_like_count": int(like_count),
-    })
+    payload["dashboard_like_count"] = int(like_count)
+    return success_response(payload)
 
 
 @router.get("/dashboard/like")
@@ -325,21 +257,16 @@ def today_stats(
     db: Session = Depends(get_db),
 ):
     today = datetime.now(timezone.utc).date()
-    day_start = today.isoformat()
-    day_end = (today + timedelta(days=1)).isoformat()
-
     rows = (
-        db.query(TestTask.test_type, func.count().label("cnt"))
+        db.query(TaskHistoryDaily.test_type, func.sum(TaskHistoryDaily.count).label("cnt"))
         .filter(
-            TestTask.user_id == current_user.user_id,
-            TestTask.requested_at >= day_start,
-            TestTask.requested_at < day_end,
+            TaskHistoryDaily.user_id == current_user.user_id,
+            TaskHistoryDaily.date == today,
         )
-        .group_by(TestTask.test_type)
+        .group_by(TaskHistoryDaily.test_type)
         .all()
     )
-
-    counts = {row.test_type: row.cnt for row in rows}
+    counts = {row.test_type: int(row.cnt or 0) for row in rows}
     return success_response({
         "rtd": counts.get(TestType.RTD.value, 0),
         "ezdfs": counts.get(TestType.EZDFS.value, 0),

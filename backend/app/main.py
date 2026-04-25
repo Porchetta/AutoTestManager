@@ -22,6 +22,7 @@ from app.core.exceptions import (
 )
 from app.db.session import SessionLocal, init_db
 from app.services.bootstrap import ensure_default_admin, ensure_storage_dirs
+from app.services.task_history import backfill_from_test_tasks, start_retention_sweeper
 from app.services.task_service import fail_inflight_tasks_on_startup
 
 settings = get_settings()
@@ -35,8 +36,10 @@ async def lifespan(_: FastAPI):
     db = SessionLocal()
     try:
         fail_inflight_tasks_on_startup(db)
+        backfill_from_test_tasks(db)
     finally:
         db.close()
+    start_retention_sweeper()
     yield
 
 

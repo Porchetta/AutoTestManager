@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.entities import TestTask, User
+from app.services.task_history import record_task_requested
 from app.utils.enums import ActionType, TaskStatus, TaskStep, TestType
 
 
@@ -61,6 +62,7 @@ def create_test_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    record_task_requested(db, task)
     return task
 
 

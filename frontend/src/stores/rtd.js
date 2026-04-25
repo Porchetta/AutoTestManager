@@ -42,6 +42,7 @@ export const useRtdStore = defineStore('rtd', () => {
   const businessUnits = ref([])
   const lines = ref([])
   const rules = ref([])
+  const favoriteRuleNames = ref([])
   const ruleVersions = ref([])
   const targetLineOptions = ref([])
   const selectedRules = computed(() =>
@@ -97,6 +98,7 @@ export const useRtdStore = defineStore('rtd', () => {
     target_lines: targetLines.value,
     monitor_rule_selection: monitorRuleSelection.value,
     active_task_ids: tasks.value.map((task) => task.task_id),
+    copy_visibility_map: copyVisibilityMap.value,
     sync_visibility_map: syncVisibilityMap.value,
     compile_visibility_map: compileVisibilityMap.value,
     test_visibility_map: testVisibilityMap.value,
@@ -124,8 +126,21 @@ export const useRtdStore = defineStore('rtd', () => {
 
   async function loadRules() {
     if (!selectedLineName.value) return
-    rules.value = (await apiGet('/api/rtd/rules', { params: { line_name: selectedLineName.value } })).items
-    ruleVersions.value = []
+    const data = await apiGet('/api/rtd/rules', { params: { line_name: selectedLineName.value } })
+    rules.value = data.items || []
+    favoriteRuleNames.value = data.favorite_names || []
+  }
+
+  async function toggleRuleFavorite(ruleName) {
+    if (!selectedLineName.value || !ruleName) return
+    const isFavorite = favoriteRuleNames.value.includes(ruleName)
+    const data = await apiPost('/api/rtd/rules/favorite', {
+      line_name: selectedLineName.value,
+      rule_name: ruleName,
+      favorite: !isFavorite,
+    })
+    favoriteRuleNames.value = data.favorite_names || []
+    await loadRules()
   }
 
   async function loadRuleVersions(ruleName) {
@@ -224,6 +239,7 @@ export const useRtdStore = defineStore('rtd', () => {
     majorChangeItems.value = session.major_change_items || {}
     targetLines.value = session.target_lines || []
     monitorRuleSelection.value = session.monitor_rule_selection || {}
+    copyVisibilityMap.value = session.copy_visibility_map || {}
     syncVisibilityMap.value = session.sync_visibility_map || {}
     compileVisibilityMap.value = session.compile_visibility_map || {}
     testVisibilityMap.value = session.test_visibility_map || {}
@@ -515,10 +531,12 @@ export const useRtdStore = defineStore('rtd', () => {
     rules,
     ruleVersions,
     targetLineOptions,
+    favoriteRuleNames,
     svnUpload,
     loadInitialData,
     loadLines,
     loadRules,
+    toggleRuleFavorite,
     loadRuleVersions,
     loadMacroReview,
     resetMacroState,

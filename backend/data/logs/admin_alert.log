@@ -135,3 +135,29 @@
 2026-04-20 15:10:14 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
 2026-04-21 14:43:18 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
 2026-04-21 14:43:27 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=SSH connection failed for host=rtpgmss1 user=hyun: Error reading SSH protocol banner fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:03:22 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=SSH connection failed for host=rtpgmss1 user=hyun: Error reading SSH protocol banner fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:15:04 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10
+2026-04-22 12:31:41 [SSH_LIMIT_FALLBACK] host=rtpgmss1 ip=172.27.44.57 user=hyun reason=Remote sshd maxstartups value is empty fallback=10

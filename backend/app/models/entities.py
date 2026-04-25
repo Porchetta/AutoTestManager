@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -136,6 +136,51 @@ class RuntimeSession(Base):
     session_type: Mapped[str] = mapped_column(String(20), nullable=False)
     payload_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
+
+
+class TaskHistoryDaily(Base):
+    """일별 사용자/테스트타입 단위 태스크 카운트 집계.
+
+    Why: TestTask는 보존 정책에 따라 삭제되지만, Dashboard/MyPage 차트는
+    영향을 받으면 안 되므로 차트 소스를 별도 집계 테이블로 분리한다.
+    """
+
+    __tablename__ = "task_history_daily"
+    __table_args__ = (
+        UniqueConstraint("date", "user_id", "test_type", name="uq_task_history_daily_key"),
+        Index("ix_task_history_daily_date", "date"),
+        Index("ix_task_history_daily_user_date", "user_id", "date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    date: Mapped[datetime] = mapped_column(Date, nullable=False)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    test_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class RuleFavorite(TimestampMixin, Base):
+    """사용자별 즐겨찾기 룰.
+
+    scope_key는 RTD면 line_name, ezDFS면 module_name. 서버별로 존재하는
+    룰이 다르므로 (test_type, scope_key) 단위로 관리한다. 보유된 favorite은
+    해당 scope에 룰이 없으면 단순히 노출되지 않을 뿐, DB에서는 보존된다.
+    """
+
+    __tablename__ = "rule_favorites"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "test_type", "scope_key", "rule_name",
+            name="uq_rule_favorite_key",
+        ),
+        Index("ix_rule_favorites_lookup", "user_id", "test_type", "scope_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    test_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    rule_name: Mapped[str] = mapped_column(String(200), nullable=False)
 
 
 class DashboardLike(TimestampMixin, Base):

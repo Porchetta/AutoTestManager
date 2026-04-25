@@ -10,8 +10,22 @@ const {
   selectedRuleTargets,
   targetLines,
   rules,
+  favoriteRuleNames,
   ruleVersions,
 } = storeToRefs(rtdStore);
+
+function isFavoriteRule(name) {
+  return favoriteRuleNames.value.includes(name);
+}
+
+function ruleOptionLabel(name) {
+  return isFavoriteRule(name) ? `★ ${name}` : name;
+}
+
+async function toggleFavoriteForCandidate() {
+  if (!ruleCandidate.value || ruleCandidate.value === "error") return;
+  await rtdStore.toggleRuleFavorite(ruleCandidate.value);
+}
 
 const ruleCandidate = ref("");
 const ruleCandidateNewVersion = ref("");
@@ -111,10 +125,32 @@ defineExpose({
           <select v-model="ruleCandidate" @change="selectRuleCandidate()">
             <option disabled value="">선택</option>
             <option v-for="item in rules" :key="item" :value="item">
-              {{ item }}
+              {{ ruleOptionLabel(item) }}
             </option>
           </select>
         </label>
+        <div class="field rule-builder-action rule-builder-action-icon">
+          <span>&nbsp;</span>
+          <button
+            type="button"
+            class="button button-ghost favorite-toggle"
+            :class="{ 'is-active': isFavoriteRule(ruleCandidate) }"
+            :disabled="!ruleCandidate || ruleCandidate === 'error'"
+            :title="
+              isFavoriteRule(ruleCandidate)
+                ? '즐겨찾기에서 제거'
+                : '즐겨찾기에 추가'
+            "
+            :aria-label="
+              isFavoriteRule(ruleCandidate)
+                ? '선택한 Rule을 즐겨찾기에서 제거'
+                : '선택한 Rule을 즐겨찾기에 추가'
+            "
+            @click="toggleFavoriteForCandidate"
+          >
+            {{ isFavoriteRule(ruleCandidate) ? "★" : "☆" }}
+          </button>
+        </div>
         <label class="field rule-builder-field">
           <span>2. Old version 선택</span>
           <select v-model="ruleCandidateOldVersion">
@@ -177,10 +213,7 @@ defineExpose({
             New: {{ item.new_version }} | Old: {{ item.old_version }}
           </p>
         </div>
-        <button
-          class="button button-ghost"
-          @click="removeRuleTarget(index)"
-        >
+        <button class="button button-ghost" @click="removeRuleTarget(index)">
           제거
         </button>
       </div>
