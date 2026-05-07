@@ -91,7 +91,9 @@ async function applyUser(user) {
     is_approved: draft.values.is_approved,
     is_admin: draft.values.is_admin,
   });
-  draft.editing = false;
+  if (userDrafts[user.user_id]) {
+    userDrafts[user.user_id].editing = false;
+  }
   uiStore.setNotice(`${user.user_id} 정보가 반영되었습니다.`);
 }
 

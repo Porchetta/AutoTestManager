@@ -142,6 +142,8 @@ def _run_custom_action(db: Session, task: TestTask, payload: dict) -> dict[str, 
             return rtd_execution_custom.execute_test_action(db, task, payload)
 
     if task.test_type == TestType.EZDFS.value:
+        if task.action_type == ActionType.SYNC.value:
+            return ezdfs_execution_custom.execute_sync_action(db, task, payload)
         if task.action_type in {ActionType.TEST.value, ActionType.RETEST.value}:
             return ezdfs_execution_custom.execute_test_action(db, task, payload)
 

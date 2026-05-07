@@ -67,9 +67,11 @@ Docker image 로 배포됩니다.
 
 ### ezDFS Test (4 단계)
 1. Module 선택
-2. Rule 선택
-3. Sub Rule 확인
+2. Rule 선택 (사용자별 즐겨찾기 ★ 토글, 즐겨찾기 Rule이 상단 정렬)
+3. Sub Rule 확인 (카드 고정 높이, 다수일 때 스크롤)
 4. 실행 / 결과서 다운로드 / SVN Upload
+   - Process all: **Sync → 테스트 → 결과서 생성** | Execute all
+   - Sync 단계는 RTD와 동일하게 module 단위로 동작
 
 ### Admin Console
 - **User Management** — 사용자 승인, 모듈 지정, 관리자 권한 토글, 삭제

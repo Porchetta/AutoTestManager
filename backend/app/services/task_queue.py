@@ -28,7 +28,7 @@ _RTD_LINE_QUEUES: dict[str, list[str]] = {}
 def requires_ezdfs_module_queue(task: TestTask, payload: dict) -> bool:
     return (
         task.test_type == TestType.EZDFS.value
-        and task.action_type in {ActionType.TEST.value, ActionType.RETEST.value}
+        and task.action_type in {ActionType.SYNC.value, ActionType.TEST.value, ActionType.RETEST.value}
         and bool(extract_ezdfs_module_name(payload))
     )
 
@@ -56,7 +56,7 @@ def enter_ezdfs_module_queue(db: Session, task: TestTask, module_name: str) -> N
         current_head_task_id = queue[0] if queue else ""
 
     task.status = TaskStatus.PENDING.value
-    task.current_step = TaskStep.TESTING.value
+    task.current_step = task.current_step or TaskStep.TESTING.value
     task.message = (
         f"Queue: {_get_ezdfs_task_rule_name(db, current_head_task_id) or module_name} ({position})"
         if position > 1

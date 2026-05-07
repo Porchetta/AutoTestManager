@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import RemoteCommandError, SSHConnectionError
 from app.models.entities import EzdfsConfig, HostConfig, TestTask
 from app.services.ssh_runtime import open_limited_ssh_client
-from app.utils.ssh_helpers import build_clean_bash_command, extract_session_payload
+from app.utils.ssh_helpers import build_clean_bash_command, extract_session_payload, run_remote_command
 
 
 def execute_test_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
@@ -75,6 +75,32 @@ def execute_test_action(db: Session, task: TestTask, payload: dict[str, Any]) ->
         "message": f"Test completed: module={config.module_name}, rule={rule_name}",
         "raw_output": output,
         "test_command": executed_command,
+    }
+
+
+def execute_sync_action(db: Session, task: TestTask, payload: dict[str, Any]) -> dict[str, str]:
+    """
+    Run `./class_sync_file.sh` in the ezDFS module's home directory.
+
+    Mirrors the RTD sync hook so that the same sync script can be deployed
+    on ezDFS module hosts. The actual script name is an offline-adaptation
+    point and may differ per environment.
+    """
+    session_payload = extract_session_payload(payload)
+    module_name = str(
+        payload.get("module_name")
+        or session_payload.get("selected_module")
+        or ""
+    ).strip()
+    if not module_name:
+        raise ValueError("module_name is required for ezDFS sync action")
+
+    config, host = _get_ezdfs_module_context(db, module_name)
+    output = run_remote_command(host, config.login_user, config.home_dir_path, "./class_sync_file.sh")
+
+    return {
+        "message": f"Sync completed: module={config.module_name}",
+        "raw_output": output,
     }
 
 

@@ -164,14 +164,16 @@
 
 .ezdfs-rule-board {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: start;
 }
 
 .ezdfs-rule-board .ezdfs-rule-card {
-  flex: 0 0 auto;
-  width: min(100%, 280px);
+  flex: 0 1 280px;
+  width: 280px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .rtd-major-change-panel {
@@ -191,6 +193,8 @@
 .rtd-major-change-board .ezdfs-rule-card {
   flex: 0 1 280px;
   width: 280px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .ezdfs-rule-card {
@@ -198,8 +202,19 @@
   gap: 8px;
 }
 
+.ezdfs-rule-card .task-head {
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
 .ezdfs-rule-card .task-head strong {
   font-size: 0.88rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.3;
 }
 
 .ezdfs-rule-card .muted {

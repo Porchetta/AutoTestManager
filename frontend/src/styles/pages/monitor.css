@@ -12,9 +12,11 @@
 
 .monitor-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .monitor-header-meta {
@@ -22,12 +24,18 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .monitor-line-name {
   font-size: 0.94rem;
   font-weight: 700;
   letter-spacing: -0.01em;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.3;
 }
 
 .monitor-rule-select {

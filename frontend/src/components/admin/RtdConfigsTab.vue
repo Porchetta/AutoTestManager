@@ -134,9 +134,14 @@ function cancelRtdEdit(item) {
 
 async function updateRtd(item) {
   const draft = rtdDraft(item);
+  const newLineName = draft.values.line_name;
   await adminStore.updateRtdConfig(item.line_name, { ...draft.values });
-  draft.editing = false;
-  uiStore.setNotice(`${draft.values.line_name} RTD 설정이 반영되었습니다.`);
+  if (rtdDrafts[newLineName]) {
+    rtdDrafts[newLineName].editing = false;
+  } else if (rtdDrafts[item.line_name]) {
+    rtdDrafts[item.line_name].editing = false;
+  }
+  uiStore.setNotice(`${newLineName} RTD 설정이 반영되었습니다.`);
 }
 
 async function deleteRtd(lineName) {

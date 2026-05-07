@@ -92,9 +92,14 @@ function cancelHostEdit(host) {
 
 async function updateHost(host) {
   const draft = hostDraft(host);
+  const newName = draft.values.name;
   await adminStore.updateHost(host.name, draft.values);
-  draft.editing = false;
-  uiStore.setNotice(`${draft.values.name} host 정보가 반영되었습니다.`);
+  if (hostDrafts[newName]) {
+    hostDrafts[newName].editing = false;
+  } else if (hostDrafts[host.name]) {
+    hostDrafts[host.name].editing = false;
+  }
+  uiStore.setNotice(`${newName} host 정보가 반영되었습니다.`);
 }
 
 async function deleteHost(name) {
@@ -188,14 +193,22 @@ function cancelCredentialEdit(hostName, loginUser) {
 async function updateCredential(hostName, loginUser) {
   const draft = credentialDraft(hostName, loginUser);
   if (!draft) return;
-  const payload = {
-    login_user: draft.values.login_user.trim(),
-  };
+  const newLoginUser = draft.values.login_user.trim();
+  const payload = { login_user: newLoginUser };
   if (draft.values.login_password) {
     payload.login_password = draft.values.login_password;
   }
   await adminStore.updateCredential(hostName, loginUser, payload);
-  uiStore.setNotice(`${hostName}/${loginUser} credential이 수정되었습니다.`);
+  const map = credentialDrafts[hostName] || {};
+  const refreshed = map[newLoginUser] || map[loginUser];
+  if (refreshed) {
+    refreshed.editing = false;
+    refreshed.values = {
+      login_user: refreshed.values.login_user,
+      login_password: "",
+    };
+  }
+  uiStore.setNotice(`${hostName}/${newLoginUser} credential이 수정되었습니다.`);
 }
 
 async function deleteCredential(hostName, loginUser) {
