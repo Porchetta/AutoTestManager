@@ -17,6 +17,7 @@ const {
   majorChangeItems,
 } = storeToRefs(ezdfsStore);
 
+const syncAllLoading = ref(false);
 const testAllLoading = ref(false);
 const reportAllLoading = ref(false);
 const executeAllLoading = ref(false);
@@ -41,6 +42,20 @@ const ruleTaskCards = computed(() =>
     task: latestTaskByRule.value.get(item.rule_name) || null,
   })),
 );
+
+async function runSync() {
+  if (!selectedModule.value || !selectedRules.value.length) {
+    uiStore.setError("추가된 Rule이 없습니다.");
+    return;
+  }
+  syncAllLoading.value = true;
+  try {
+    await ezdfsStore.runAllRules("sync");
+    uiStore.setNotice("선택된 Rule 전체 SYNC 요청이 등록되었습니다.");
+  } finally {
+    syncAllLoading.value = false;
+  }
+}
 
 async function runTest() {
   if (!selectedModule.value || !selectedRules.value.length) {
@@ -101,6 +116,19 @@ async function executeAll() {
 
   executeAllLoading.value = true;
   try {
+    const syncCreated = await ezdfsStore.runAllRules("sync");
+    if (syncCreated.length) {
+      const syncResolved = await ezdfsStore.waitForTasks(
+        syncCreated.map((task) => task.task_id),
+      );
+      if (syncResolved.some((task) => task.status !== "DONE")) {
+        uiStore.setError(
+          "Sync 단계에서 실패가 발생해 전체 실행을 중단했습니다.",
+        );
+        return;
+      }
+    }
+
     const created = await ezdfsStore.runAllRules("test");
     const resolved = await ezdfsStore.waitForTasks(
       created.map((task) => task.task_id),
@@ -139,7 +167,19 @@ async function executeAll() {
           <div class="operation-process-sequence">
             <div class="operation-process-step">
               <button
-                class="button operation-button operation-button-step-1"
+                class="button operation-button operation-button-step-sync"
+                :disabled="syncAllLoading || executeAllLoading"
+                @click="runSync"
+              >
+                <strong>{{
+                  syncAllLoading ? "Syncing..." : "Sync"
+                }}</strong>
+              </button>
+            </div>
+            <span class="operation-process-arrow" aria-hidden="true">→</span>
+            <div class="operation-process-step">
+              <button
+                class="button operation-button operation-button-step-3"
                 :disabled="testAllLoading || executeAllLoading"
                 @click="runTest"
               >
@@ -151,7 +191,7 @@ async function executeAll() {
             <span class="operation-process-arrow" aria-hidden="true">→</span>
             <div class="operation-process-step">
               <button
-                class="button operation-button operation-button-step-2"
+                class="button operation-button operation-button-step-4"
                 :disabled="reportAllLoading || executeAllLoading"
                 @click="generateReport"
               >

@@ -117,13 +117,18 @@ function cancelEzdfsEdit(item) {
 
 async function updateEzdfs(item) {
   const draft = ezdfsDraft(item);
+  const newModuleName = draft.values.module_name;
   await adminStore.updateEzdfsConfig(item.module_name, {
     ...draft.values,
     port: Number(draft.values.port),
   });
-  draft.editing = false;
+  if (ezdfsDrafts[newModuleName]) {
+    ezdfsDrafts[newModuleName].editing = false;
+  } else if (ezdfsDrafts[item.module_name]) {
+    ezdfsDrafts[item.module_name].editing = false;
+  }
   uiStore.setNotice(
-    `${draft.values.module_name} ezDFS 설정이 반영되었습니다.`,
+    `${newModuleName} ezDFS 설정이 반영되었습니다.`,
   );
 }
 

@@ -171,6 +171,26 @@ def _create_ezdfs_task(
     return success_response({"task": serialize_task(task)})
 
 
+@router.post("/actions/sync")
+def sync_action(
+    payload: EzdfsActionRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    task = create_test_task(
+        db=db,
+        test_type=TestType.EZDFS,
+        action_type=ActionType.SYNC,
+        owner_user_id=current_user.user_id,
+        target_name=payload.rule_name,
+        requested_payload=payload.model_dump(),
+        current_step=TaskStep.SYNCING,
+    )
+    queue_task(background_tasks, task.task_id, TaskStep.SYNCING, TestType.EZDFS)
+    return success_response({"task": serialize_task(task)})
+
+
 @router.post("/actions/test")
 def test_action(
     payload: EzdfsActionRequest,

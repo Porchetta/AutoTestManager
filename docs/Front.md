@@ -43,6 +43,13 @@
 - 삭제 같은 중요 액션은 브라우저 기본 `confirm` 대신 커스텀 확인 모달을 사용한다.
 - 인증 만료 시 저장된 인증 정보를 제거하고 `/login`으로 이동한다.
 - 진행 중 작업이 있는 화면은 서버 세션 기준으로 복원한다.
+- 긴 rule / line 이름이 들어와도 카드/트레이/모니터 헤더가 깨지지 않도록 컨테이너는
+  `flex-wrap: wrap`, 텍스트는 `overflow-wrap: anywhere`로 처리한다.
+- 다항목 리스트(예: Sub Rule, Macro)는 카드 높이를 고정(44px)하고 일정 높이(360px)
+  초과 시 자체 스크롤을 사용한다.
+- Admin 탭의 인라인 편집은 **반영** 즉시 비편집 상태로 복귀해야 한다 (drafts가
+  `syncDrafts`로 새 객체로 교체되므로, 업데이트 후에는 항상 최신 키 기준으로
+  `editing=false`를 다시 설정한다).
 
 ### 3.4 디자인 시스템
 - CSS 토큰은 `:root`(라이트)와 `[data-theme="dark"]` 오버라이드로 이중 구성한다.
@@ -371,8 +378,11 @@
 - 단일 선택
 
 #### Step 3. Test Manage
-- 테스트 실행
-- 재테스트
+- Process all 시퀀스: **Sync → 테스트 → 결과서 생성** | Execute all
+  - Sync 단계는 RTD와 동일하게 module 단위로 실행 (`POST /api/ezdfs/actions/sync`)
+  - Execute all은 sync → test → 결과서 자동 진행, 단계별 실패 시 즉시 중단
+  - 버튼 색상은 RTD `step-sync` / `step-3` / `step-4` 톤과 동일
+- 단건 테스트 / 재테스트
 - 결과서 생성 / 다운로드
 - RawData 다운로드
 - polling으로 상태 갱신

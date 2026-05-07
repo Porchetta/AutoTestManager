@@ -708,8 +708,14 @@ Rule / Version 파싱 정책:
 ```
 
 ### 14.3 실행 제어 API
+- `POST /api/ezdfs/actions/sync`
 - `POST /api/ezdfs/actions/test`
 - `POST /api/ezdfs/actions/retest`
+
+`actions/sync`는 RTD sync와 동일하게 module home dir에서 `./class_sync_file.sh`를
+실행한다. SYNC task는 `TaskStep.SYNCING`으로 큐잉되며, ezDFS module 단위 큐
+(`task_queue.requires_ezdfs_module_queue`)를 통해 TEST/RETEST와 같은 직렬화
+큐에 들어간다.
 
 ### 14.4 상태 API
 - `GET /api/ezdfs/status`
