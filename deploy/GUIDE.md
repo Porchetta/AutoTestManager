@@ -31,9 +31,11 @@
   # 개발 모드
   firewall-cmd --permanent --add-port=10223/tcp   # Backend API
   firewall-cmd --permanent --add-port=4203/tcp   # Frontend Vite
+  firewall-cmd --permanent --add-port=8080/tcp   # sqlite-web (사용 시)
 
   # 운영 모드 (4203만 필요, backend는 내부 통신)
   firewall-cmd --permanent --add-port=4203/tcp
+  # 운영에서 sqlite-web을 켜는 경우에만 8080/tcp 추가
 
   firewall-cmd --reload
   ```
@@ -104,13 +106,17 @@ docker images | grep atm
 ### 3-3. 환경 변수 설정
 
 ```bash
-vi /opt/atm/backend.env
+vi /opt/atm/backend.dev.env
+vi /opt/atm/backend.prod.env
 ```
 
 반드시 변경할 항목:
 ```env
 JWT_SECRET_KEY=임의의-긴-랜덤-문자열-여기에-입력   # 필수
 DEFAULT_ADMIN_PASSWORD=변경할-관리자-비밀번호       # 필수
+SVN_UPLOAD_HOST_IP=...
+SVN_UPLOAD_HOST_USER=...
+SVN_UPLOAD_HOST_PASSWORD=...
 ```
 
 > `DEFAULT_ADMIN_PASSWORD`는 **최초 컨테이너 실행 시** DB에 seed됩니다.
@@ -135,6 +141,7 @@ chmod +x deploy/run-dev.sh
 | Frontend (Vite HMR) | `http://서버IP:4203` |
 | Backend API | `http://서버IP:10223` |
 | Swagger Docs | `http://서버IP:10223/docs` |
+| DB Web (기본 ON) | `http://서버IP:8080` |
 
 **소스 수정 반영 방식:**
 
@@ -162,6 +169,7 @@ chmod +x deploy/run-prod.sh
 
 - Frontend: nginx가 정적 파일 서빙 (빌드 포함, 수 분 소요)
 - Backend: 외부 미노출, nginx가 `/api/*` → `atm-backend:10223` 프록시
+- sqlite-web: 기본 OFF (`backend.prod.env`에서 `SQLITE_WEB_ENABLED=1`로 변경 시 사용)
 
 ---
 
@@ -234,9 +242,12 @@ ls /opt/atm/backend/data/
 │       └── logs/
 ├── frontend/
 │   └── src/              ← 컨테이너 마운트 (소스)
-├── backend.env           ← 환경 변수 (git 미포함, 서버에서 직접 관리)
+├── backend.dev.env       ← 개발 모드 환경 변수 (git 미포함)
+├── backend.prod.env      ← 운영 모드 환경 변수 (git 미포함)
 └── deploy/
     ├── run-dev.sh
     ├── run-prod.sh
-    └── backend.env.example
+    └── env/
+        ├── backend.dev.env.example
+        └── backend.prod.env.example
 ```

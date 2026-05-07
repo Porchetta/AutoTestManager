@@ -83,38 +83,82 @@ Docker image 로 배포됩니다.
 
 ---
 
-## 빠른 시작 (로컬)
+## 빠른 시작 (Docker 개발 모드)
 
 개발 환경은 **Windows + WSL2 (Ubuntu)** 기준입니다.
 
-### 1) Backend
-
 ```bash
-cd backend
-chmod +x dev-setup.sh run-dev.sh
-./dev-setup.sh      # .venv 생성 + requirements 설치 (uv 우선, 없으면 venv+pip)
-./run-dev.sh        # uvicorn --reload, port 10223
+./build.sh
+./deploy/setup.sh atm-images-YYYYMMDD_HHMM.tar.gz
+vi backend.dev.env
+./deploy/run-dev.sh
 ```
 
 | 경로 | URL |
 |---|---|
+| Frontend | `http://127.0.0.1:4203` |
 | API | `http://127.0.0.1:10223` |
 | Swagger | `http://127.0.0.1:10223/docs` |
 | Health | `http://127.0.0.1:10223/health` |
+| DB Web | `http://127.0.0.1:8080` |
 
 기본 관리자 계정: `admin` / `admin1234`
 (최초 기동 시 `bootstrap.seed_admin()` 이 자동 생성)
 
-### 2) Frontend
+실제 환경값은 git에 포함하지 않는 `backend.dev.env`, `backend.prod.env`에서 관리합니다.
+예제 파일은 `deploy/env/` 아래에 있습니다.
 
-```bash
-cd frontend
-cp .env.example .env   # VITE_API_BASE_URL=http://127.0.0.1:10223
-npm install
-npm run dev            # Vite, port 4203
+---
+
+## 환경 파일 구조
+
+기존의 단일 `backend.env` 를 **dev / prod 두 개의 env 파일**로 분리했습니다.
+실제 값은 git에 포함하지 않으며, 템플릿만 `deploy/env/` 아래에 둡니다.
+
+```
+AutoTestManager/
+├── backend.dev.env              ← 개발 모드 실값 (gitignored)
+├── backend.prod.env             ← 운영 모드 실값 (gitignored)
+└── deploy/
+    ├── run-dev.sh               ← 공식 개발 실행 진입점
+    ├── run-prod.sh              ← 공식 운영 실행 진입점
+    ├── setup.sh                 ← 이미지 load + env 템플릿 복사
+    └── env/
+        ├── backend.dev.env.example
+        └── backend.prod.env.example
 ```
 
-브라우저에서 `http://127.0.0.1:4203` 접속.
+- 로컬 전용 `backend/dev-setup.sh`, `backend/run-dev.sh` 와 단일 `backend.env`/
+  `frontend/.env` 는 제거되었습니다. 모든 실행은 `deploy/run-dev.sh` /
+  `deploy/run-prod.sh` 로 일원화됩니다.
+- `.gitignore` 가 `backend*.env`, `backend/.env`, `frontend/.env`,
+  `deploy/env/*.env` 를 모두 추적 제외합니다.
+- 운영 서버에서는 `deploy/setup.sh` 가 처음 실행될 때 `deploy/env/*.example`
+  을 루트의 `backend.dev.env` / `backend.prod.env` 로 복사합니다.
+
+---
+
+## DB Web (sqlite-web)
+
+개발 중 SQLite DB(`backend/data/autotestmanager.db`)를 브라우저에서 바로
+조회/편집할 수 있도록 **sqlite-web** 을 backend 컨테이너에 함께 띄웁니다.
+
+| 모드 | 기본 ON/OFF | URL | 환경 변수 |
+|---|---|---|---|
+| Dev (`run-dev.sh`) | **ON** | `http://127.0.0.1:8080` | `SQLITE_WEB_ENABLED=1` |
+| Prod (`run-prod.sh`) | **OFF** | (필요 시 8080) | `backend.prod.env` 에서 ON 변경 가능 |
+
+관련 환경 변수 (`backend.dev.env` / `backend.prod.env`):
+
+```env
+SQLITE_WEB_ENABLED=1        # 0이면 sqlite-web 프로세스 미기동
+SQLITE_WEB_HOST=0.0.0.0
+SQLITE_WEB_PORT=8080
+SQLITE_WEB_READ_ONLY=0      # 1로 두면 read-only 모드
+```
+
+방화벽이 필요한 환경에서는 `8080/tcp` 를 dev 서버에서 추가로 허용해야
+합니다 (`deploy/GUIDE.md` 참고).
 
 ---
 

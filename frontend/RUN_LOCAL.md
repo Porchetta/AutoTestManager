@@ -5,7 +5,7 @@ WSL 터미널에서 프론트를 직접 실행할 때 사용하는 명령 정리
 ## 1. frontend 디렉터리로 이동
 
 ```bash
-cd /home/hyun/develope/AutoTestManager/frontend
+cd frontend
 ```
 
 ## 2. 환경 파일 준비

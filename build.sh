@@ -36,6 +36,8 @@ tar czf "${SOURCE_TAR}" \
   --exclude='backend/__pycache__' \
   --exclude='backend/data' \
   --exclude='backend/.env' \
+  --exclude='backend*.env' \
+  --exclude='deploy/env/*.env' \
   --exclude='frontend/node_modules' \
   --exclude='frontend/dist' \
   --exclude='frontend/.env' \
@@ -54,6 +56,8 @@ tar czf "${SOURCE_TAR}" \
   --exclude='backend/__pycache__' \
   --exclude='backend/data' \
   --exclude='backend/.env' \
+  --exclude='backend*.env' \
+  --exclude='deploy/env/*.env' \
   --exclude='frontend/node_modules' \
   --exclude='frontend/dist' \
   --exclude='frontend/.env' \
