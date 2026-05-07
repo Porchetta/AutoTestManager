@@ -10,6 +10,15 @@ RTD / ezDFS 위저드, 결과 조회, Admin Console 을 한 화면 안에서 제
 
 ## 빠른 시작
 
+공식 개발 실행은 루트의 Docker 스크립트를 사용합니다.
+
+```bash
+cd ..
+./deploy/run-dev.sh
+```
+
+로컬에서 프론트엔드만 수동 실행할 때:
+
 ```bash
 cd frontend
 cp .env.example .env      # VITE_API_BASE_URL=http://127.0.0.1:10223
@@ -17,10 +26,16 @@ npm install
 npm run dev               # Vite dev server, port 4203
 ```
 
+> `frontend/.env` 는 git에서 제외되는 로컬 전용 파일입니다. Docker 실행
+> (`deploy/run-dev.sh`)을 사용하는 경우 별도로 만들 필요가 없습니다.
+> backend 쪽 환경값은 루트의 `backend.dev.env` / `backend.prod.env` 에서
+> 관리합니다 (자세한 내용은 [상위 README](../README.md#환경-파일-구조)).
+
 | | |
 |---|---|
 | Dev URL | `http://127.0.0.1:4203` |
 | Backend | `http://127.0.0.1:10223` (via `VITE_API_BASE_URL`) |
+| DB Web | `http://127.0.0.1:8080` (backend 컨테이너의 sqlite-web) |
 
 프로덕션 빌드:
 

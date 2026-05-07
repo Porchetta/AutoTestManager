@@ -51,19 +51,18 @@ Frontend (Vue 3 SPA)        Backend (FastAPI)        Remote Hosts
 
 ## Development Setup
 
-### Backend
+### Docker dev
 ```bash
-cd backend
-chmod +x dev-setup.sh run-dev.sh
-./dev-setup.sh      # Creates .venv, installs requirements.txt
-./run-dev.sh        # Starts uvicorn on port 10223
+./build.sh
+./deploy/setup.sh atm-images-YYYYMMDD_HHMM.tar.gz
+./deploy/run-dev.sh
 ```
 
 Default admin: `admin` / `admin1234`
 
 API docs: http://127.0.0.1:10223/docs
 
-### Frontend
+### Frontend only, manual local run
 ```bash
 cd frontend
 cp .env.example .env
